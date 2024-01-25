@@ -1,6 +1,7 @@
 # tbilby-sw
 
 
+This project is a suggestion how to structure the tbilby package 
 
 ## Getting started
 
