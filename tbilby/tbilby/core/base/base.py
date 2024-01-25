@@ -1,20 +1,6 @@
-from bilby.core.prior import Prior, Uniform, ConditionalBeta, Beta, ConditionalUniform, ConditionalBasePrior, LogUniform
-from bilby.core.prior import ConditionalLogUniform, Constraint, DeltaFunction
-from scipy.interpolate import interp1d
-from scipy.special._ufuncs import xlogy
 import numpy as np
-import matplotlib.pyplot as plt
 from bilby.core.utils import infer_parameters_from_function
 import bilby
-import pandas as pd
-import corner
-from bilby.core.prior import PriorDict
-from bilby.core.utils import infer_args_from_method, infer_parameters_from_function
-from bilby.core.prior import conditional_prior_factory
-from scipy.special import erf
-import transdimensional as trans
-import inspect
-from gwpy.timeseries import TimeSeries
 
 
 
