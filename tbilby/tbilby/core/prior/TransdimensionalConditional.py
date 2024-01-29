@@ -225,6 +225,9 @@ class TransdimensionalConditionalUniform(transdimensional_conditional_prior_fact
     pass
 
 
+class TransdimensionalConditionalBeta(transdimensional_conditional_prior_factory(bilby.core.prior.ConditionalBeta)):
+    pass
+
 class TransdimensionalConditionalInterped(transdimensional_conditional_prior_factory(bilby.core.prior.ConditionalInterped)):
     pass
 

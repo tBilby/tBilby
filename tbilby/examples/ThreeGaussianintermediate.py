@@ -90,7 +90,7 @@ plt.xlabel('n components')
 plt.ylabel('freq.')
    
     
-# assuming we got the what we wanted..    
+# assuming we got what we wanted..    
 tbest = result.posterior[result.posterior['n_gauss']==3]
 
 labels = ['mu0','mu1','mu2']

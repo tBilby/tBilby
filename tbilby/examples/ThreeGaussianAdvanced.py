@@ -24,37 +24,74 @@ class TransdimensionalConditionalUniform(tbilby.core.prior.TransdimensionalCondi
         return dict(minimum=minimum)
  
 # create a 
-class TransdimensionalConditionalInterped(tbilby.core.prior.TransdimensionalConditionalInterped):
+class TransdimensionalConditionalBeta(tbilby.core.prior.TransdimensionalConditionalBeta):
    # one must define the transdimensional_condition_function function, so we know what to do with conditional variables...  
     # it is an abstract function, without it you cant instantiate this class 
     def transdimensional_condition_function(self,**required_variables):
         ''' setting the mimmum according the the last peak value of the gaussian.
         # note that this class is not general in any sense, here you refer to the parameters you are 
         working with '''
+        # here we should have access to all the relevant params 
+        
+    
+        
+
         # mu is returned as an array 
-        minimum = self.minimum
-        #self.yy = 
-        if(len(self.mu)>0): # handle the first mu case
-            minimum = self.mu[-1]               
-            setattr(self,'minimum',minimum)  # setting the atribute of the class
-        return dict(minimum=minimum)
+        alpha= self.alpha
+        beta= self.beta
+        minimum = self.minimum       
+        if(len(self.mu_l)>0): # handle the first mu case
+            minimum = self.mu_l[-1] # use the previous ones to see the minimum                
+            # assuming we know that the lorentzian are located where the gusasians, lets have a dynamic prior 
+            
+            # here you get access to the parameters in the following way:
+            # self.mu[trans-dimensional componant number ,sample_number]
+            # so one can expect mu[8,50000] matrix when you are trying to sample 50,000 samples from this prior
+            # or it could show up as mu[8,] since a single event was requested. 
+            
+            # parameters like self.n_gauss, might show up as array-like, array or float, depending on the number of samples requested from the prior   
+            
+            # 
+            # take the avg and std as alpha and beta, only for the example purposes, no logic in doing that!!
+            
+            if isinstance(self.n_gauss, float):
+                # this means a single sample was requested 
+                n_g = np.array(self.n_gauss)
+                self.mu=self.mu.reshape(-1,1)
+            else:
+                n_g = self.n_gauss
+            
+            alpha = np.mean(self.mu,axis=0)                
+            beta = np.std(self.mu,axis=0)                
+            
+            
+            
+            
+        return dict(alpha=alpha,beta = beta, minimum=minimum)
   
 
 
 
 # model 
-n_peaks=8
+n_peaks_g=8
+n_peaks_l=5
 sigma = 10
 sigma_data_l =1 
-Amp_noise=0.05
+Amp_l=0.03
+Amp_noise=0.01
 def gauss(x,mu,sigma_g):
     return norm(mu,sigma_g).pdf(x)
-def lorentzian(x,mu_l,sigma_l):
-    return cauchy().pdf(x,mu_l,sigma_l)
+def lorentzian(x,A,mu_l,sigma_l):
+    #return 0
+    x_moved =(x - mu_l) / sigma_l
+    return A*cauchy.pdf(x_moved) / sigma_l
+    
 
-# here we define a model which could be a sum of several functions.. 
+# here we define a model which could be a sum of several functions, here it a sum of 
+# gauss + lorentzian where only the mean is trans-dimensional  
 componant_functions_dict={}
-componant_functions_dict[gauss]=(n_peaks,'mu')
+componant_functions_dict[gauss]=(n_peaks_g,'mu')
+componant_functions_dict[lorentzian]=(n_peaks_l,'mu_l')
 model = tbilby.core.base.create_transdimensional_model('model',  componant_functions_dict,returns_polarization=False,SaveTofile=True)
 
 # create some data to work with 
@@ -64,32 +101,54 @@ p=np.array([54, 15, 81])
 #add some noise
 noise=norm(loc=0,scale=Amp_noise).rvs(1001)
 y =   gauss(x,p[0],sigma) +  gauss(x,p[1],sigma) +  gauss(x,p[2],sigma) +\
-      lorentzian(x,p[0],sigma_data_l) + lorentzian(x,p[1],sigma_data_l) +lorentzian(x,p[2],sigma_data_l) + noise
+      lorentzian(x,Amp_l,p[0],sigma_data_l) + lorentzian(x,Amp_l,p[1],sigma_data_l) +lorentzian(x,Amp_l,p[2],sigma_data_l) + noise
+# plot it if you want to have a look 
+#plt.close('all')
+#plt.plot(x,y)
 
-plt.plot(x,y)
-gggg
 # priors 
+# make sure you call the discrete priors with n_function name , i.e n_lorentzian
 priors_t = bilby.core.prior.dict.ConditionalPriorDict()
-priors_t['n_gauss'] = tbilby.core.prior.DiscreteUniform(0,n_peaks,'n_gauss')
+priors_t['n_gauss'] = tbilby.core.prior.DiscreteUniform(1,n_peaks_g,'n_gauss') # at leat one guassian
+priors_t['n_lorentzian'] = tbilby.core.prior.DiscreteUniform(0,n_peaks_l,'n_loren')
 priors_t['sigma_g']= sigma # set it constant so we wont sample on it 
-# creates a list of conditional unifrom priros for you, nested_conditional_transdimensional_params is used, 
+priors_t['sigma_l']= sigma_data_l
+# estimate the min and max from the data
+priors_t['A'] = bilby.core.prior.Uniform(np.min(y), 2*np.max(y))# allow some extra freedom for the max 
+
+# creates a list of conditional unifrom priors for you, now it will use all the options 
+#nested_conditional_transdimensional_params is used, 
 #meaning you will get dependence mu2(mu1,mu0).. 
 priors_t =tbilby.core.base.create_transdimensional_priors(transdimensional_prior_class=TransdimensionalConditionalUniform,\
                                                           param_name='mu',\
-                                                          nmax= n_peaks,\
+                                                          nmax= n_peaks_g,\
                                                           nested_conditional_transdimensional_params=['mu'],\
                                                           conditional_transdimensional_params=[],\
                                                           conditional_params=[],\
                                                           prior_dict_to_add=priors_t,\
                                                           SaveConditionFunctionsToFile=False,\
                                                           minimum= 0,maximum=100)
-samples = priors_t.sample(size=50000)
+    
+# nested_conditional_transdimensional_params is used, conditional_transdimensional_params and conditional_params
+#meaning you will get the dependence mu_l2(mu_l1,mu_l0,mu8,mu7,...,n_gauss).. so you can use these to calculate what you need 
+priors_t =tbilby.core.base.create_transdimensional_priors(transdimensional_prior_class=TransdimensionalConditionalBeta,\
+                                                          param_name='mu_l',\
+                                                          nmax= n_peaks_l,\
+                                                          nested_conditional_transdimensional_params=['mu_l'],\
+                                                          conditional_transdimensional_params={'mu':n_peaks_g},\
+                                                          conditional_params=['n_gauss'],\
+                                                          prior_dict_to_add=priors_t,\
+                                                          SaveConditionFunctionsToFile=True,\
+                                                          minimum= 0,maximum=100,alpha=1,beta=1)    
+    
+    
+samples = priors_t.sample(size=50)
 # just to see that the conditional works 
-
+plt.close('all')
 plt.figure()
-plt.plot(samples['mu0'],samples['mu1'],'o') 
-plt.xlabel('mu0')
-plt.ylabel('mu1')
+plt.plot(samples['mu_l0'],samples['mu_l1'],'o') 
+plt.xlabel('mu_l0')
+plt.ylabel('mu_l1')
 
 likelihood = bilby.likelihood.GaussianLikelihood(x, y, model, sigma=Amp_noise*np.ones(len(x)))
 
@@ -114,7 +173,7 @@ plt.xlabel('n components')
 plt.ylabel('freq.')
    
     
-# assuming we got the what we wanted..    
+# assuming we got what we wanted..    
 tbest = result.posterior[result.posterior['n_gauss']==3]
 
 labels = ['mu0','mu1','mu2']
