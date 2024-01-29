@@ -5,7 +5,8 @@ import bilby
 
 
 
-def create_transdimensional_priors(transdimensional_prior_class,param_name,nmax,conditional_transdimensional_params,conditional_params,prior_dict_to_add=None,**reference_params):    
+
+def create_transdimensional_priors(transdimensional_prior_class,param_name,nmax,nested_conditional_transdimensional_params,conditional_transdimensional_params=[],conditional_params=[],prior_dict_to_add=None,SaveConditionFunctionsToFile=False,**reference_params):    
     '''
     
 
@@ -17,8 +18,14 @@ def create_transdimensional_priors(transdimensional_prior_class,param_name,nmax,
         the parameter base name, e.g. "alpha",  this will prdouce several priors for alpha0, alpha1,.. alpha_nmax
     nmax : TYPE
         The maximal number of componant functions 
-    conditional_transdimensional_params : TYPE
+    nested_conditional_transdimensional_params : TYPE
         the conditional transdimensional parameters, e.g. 'mu', will prdouce dependnce of alpha1(alpha0,mu0) ,alpha2(alpha1,alpha0,mu1,mu0),... 
+   conditional_transdimensional_params : dict or list 
+        additional conditional transdimensional parameters which are not related to "alpha", e.g {"beta":3 } , following the example form above  
+        alpha1(alpha0,mu0,beta0,beta1,beta2), alpha2(alpha1,alpha0,mu1,mu0,beta0,beta1,beta2), if ["beta"] would be provided, the same componant function as the main variable is assumed, 
+        i.e.
+        alpha1(alpha0,mu0,beta0,beta1), alpha2(alpha1,alpha0,mu1,mu0,beta0,beta1,beta2)
+        
     conditional_params : TYPE
         just normal conditional params, following the example from above with a new 'c' parameter , this will create alpha2(alpha1,alpha0,mu1,mu0,c)   
     prior_dict_to_add : TYPE, optional
@@ -37,11 +44,12 @@ def create_transdimensional_priors(transdimensional_prior_class,param_name,nmax,
         prior_dict_to_add = bilby.core.prior.dict.ConditionalPriorDict()
     types =  [transdimensional_prior_class.__mro__[j].__name__ for j in np.arange(len(transdimensional_prior_class.__mro__))]
     if 'TransdimensionalConditionalPrior' not in types:
-        raise Exception('create_transdimensional_priors recieved not a TransdimensionalConditionalPrior calss type !!')
+        raise Exception('create_transdimensional_priors recieved not a TransdimensionalConditionalPrior class type !!')
+        
+    
 
-    for n in np.arange(nmax):
-        #print('creating prior number ' + str(n))           
-        prior_dict_to_add[param_name+str(n)]= transdimensional_prior_class(name = param_name+str(n),componant_function_number =n ,conditional_transdimensional_params=conditional_transdimensional_params,conditional_params=conditional_params,**reference_params)
+    for n in np.arange(nmax):        
+        prior_dict_to_add[param_name+str(n)]= transdimensional_prior_class(name = param_name+str(n),componant_function_number =n ,nested_conditional_transdimensional_params=nested_conditional_transdimensional_params,conditional_transdimensional_params=conditional_transdimensional_params,conditional_params=conditional_params,debug_print_out=SaveConditionFunctionsToFile,**reference_params)
     
     
        
@@ -299,4 +307,7 @@ def create_plain_priors(prior_class,param_base_name,nmax,prior_dict_to_add=None,
     
     
     return prior_dict_to_add 
+
+
+
 

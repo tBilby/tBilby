@@ -6,36 +6,78 @@ import bilby
 import numpy as np
 
 
-def create_cond_function(parameter_name,prior_class_name,componant_function_number,conditional_transimnesional_params,conditional_params,SaveTofile=False):
+def create_cond_function(parameter_name,prior_class_name,componant_function_number,nested_conditional_transdimensional_params,conditional_transdimensional_params,conditional_params,SaveTofile=False):
     
     function_name="condition_func"+prior_class_name +'_' +  '_' + parameter_name # helps to seperate different priors and params  
     arguments = ["reference_params"]
     function_lines=''
     keep_functions_for_writing_to_file=''
     
-    for t in conditional_transimnesional_params:
+    for t in nested_conditional_transdimensional_params:
         targs=[]               
         for n in np.arange(componant_function_number): #np.arange(2)= [1], so it takes the lower level automaticaly without n-1  
             arguments.append(t+str(n))
             targs.append(t+str(n))
         function_lines += '\n\t' + t + '=np.array(['+ ', '.join(targs) + '])'
+        
+    # take care of the non nested trans params     
+    if len(conditional_transdimensional_params) > 0: # check we got something
+        if isinstance(conditional_transdimensional_params,dict):
+            for t in conditional_transdimensional_params.keys():
+                targs=[]               
+                for n in np.arange(conditional_transdimensional_params[t]): # this is independed of the number of componant functions 
+                    arguments.append(t+str(n))
+                    targs.append(t+str(n))
+                function_lines += '\n\t' + t + '=np.array(['+ ', '.join(targs) + '])' 
+                                   
+        elif isinstance(conditional_transdimensional_params, list):
+            for t in conditional_transdimensional_params:
+                targs=[]               
+                for n in np.arange(componant_function_number+1): #+1 so it takes the last  level as well
+                    arguments.append(t+str(n))
+                    targs.append(t+str(n))
+                function_lines += '\n\t' + t + '=np.array(['+ ', '.join(targs) + '])'             
+        else:
+            raise Exception('conditional_transdimensional_params is not alist or a dict, not sure how to handle this, sorry.   ')
+
+    
+    
+      
+        
     
     # add the non transdimensions params
     arguments +=list(conditional_params)
     
     function_signture ='def ' + function_name + '(' + ', '.join(arguments) + '):'
     return_statment ='\n\treturn dict('
-    for t in conditional_transimnesional_params:
+    # nested conditional
+    for t in nested_conditional_transdimensional_params:
         return_statment += t +'=' + t 
-        if t!= list(conditional_transimnesional_params)[-1]:
+        if t!= list(nested_conditional_transdimensional_params)[-1]:
             return_statment +=','
-    for v in conditional_params:
-        if v== list(conditional_params)[0]:
-            return_statment +=','
+    
+    # non - nested conditional    
+    if isinstance(conditional_transdimensional_params,dict): # turn into a list, we are done with the dict 
+        conditional_transdimensional_params = list(conditional_transdimensional_params.keys()).copy()
+    if(len(conditional_transdimensional_params)>0):
+        return_statment +=',' 
         
+    for t in conditional_transdimensional_params:
+        return_statment += t +'=' + t 
+        if t!= list(conditional_transdimensional_params)[-1]:
+            return_statment +=','            
+            
+    # normal conditional            
+    if(len(conditional_params)>0):
+        return_statment +=',' 
+    
+    for v in conditional_params:        
         return_statment += v +'=' + v 
         if v!= list(conditional_params)[-1]:
-            return_statment +=','        
+            return_statment +=','
+            
+            
+            
     return_statment +=')'     
         
     full_function = function_signture + function_lines + return_statment
@@ -55,7 +97,7 @@ def create_cond_function(parameter_name,prior_class_name,componant_function_numb
 
 def transdimensional_conditional_prior_factory(conditional_prior_class):
     class TransdimensionalConditionalPrior(conditional_prior_class,ABC):
-        def __init__(self, name, componant_function_number,conditional_transdimensional_params,conditional_params,latex_label=None, unit=None,
+        def __init__(self, name, componant_function_number,nested_conditional_transdimensional_params,conditional_transdimensional_params,conditional_params,debug_print_out=False,latex_label=None, unit=None,
                      boundary=None, **reference_params):
             
             # this fixmakes it possible to open the results.json, casue an issue with the names..  
@@ -99,7 +141,7 @@ def transdimensional_conditional_prior_factory(conditional_prior_class):
             """
             # you have to run it in this ugly way since some things are not defined before the init and you these things in order to constructteh function 
             cls_name = 'Transdimensional{}'.format(conditional_prior_class.__name__)  
-            cond_func =create_cond_function(name,cls_name,componant_function_number,conditional_transdimensional_params,conditional_params,SaveTofile=True)                                                    
+            cond_func =create_cond_function(name,cls_name,componant_function_number,nested_conditional_transdimensional_params,conditional_transdimensional_params,conditional_params,SaveTofile=debug_print_out)                                                    
             globals()[cond_func.__name__] = cond_func
             #cond_func = self.create_condition_function(name,cls_name,componant_function_number,conditional_transdimensional_params,conditional_params)
                 
@@ -114,10 +156,11 @@ def transdimensional_conditional_prior_factory(conditional_prior_class):
             #self.__class__.__qualname__ = 'Transdimensional{}'.format(conditional_prior_class.__qualname__)
             self.transdimesional_params_data_holder_dict={}
             
-            for i in list(conditional_transdimensional_params)+list(conditional_params):
+            for i in list(nested_conditional_transdimensional_params)+list(conditional_params):
                 self.transdimesional_params_data_holder_dict[i] = None
             
             self.componant_function_number=componant_function_number
+            self.nested_conditional_transdimensional_params=nested_conditional_transdimensional_params
             self.conditional_transdimensional_params=conditional_transdimensional_params
             self.conditional_params=conditional_params
             
@@ -178,6 +221,10 @@ def transdimensional_conditional_prior_factory(conditional_prior_class):
 
 
 class TransdimensionalConditionalUniform(transdimensional_conditional_prior_factory(bilby.core.prior.ConditionalUniform)):
+    pass
+
+
+class TransdimensionalConditionalInterped(transdimensional_conditional_prior_factory(bilby.core.prior.ConditionalInterped)):
     pass
 
 
