@@ -58,7 +58,7 @@ def create_transdimensional_priors(transdimensional_prior_class,param_name,nmax,
 
  
 
-def create_priors_with_nested_condition_functions(prior_class,param_base_name='alpha',conditional_tParams_dict_conversion={'alpha':'mu','beta':'sigma'} ,nmax=3,print_out=False,SaveTofile=False,prior_dict_to_add=None,**reference_params):
+def _create_priors_with_nested_condition_functions(prior_class,param_base_name='alpha',conditional_tParams_dict_conversion={'alpha':'mu','beta':'sigma'} ,nmax=3,print_out=False,SaveTofile=False,prior_dict_to_add=None,**reference_params):
     '''
     
 

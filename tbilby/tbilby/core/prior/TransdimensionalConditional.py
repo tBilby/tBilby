@@ -101,7 +101,8 @@ def transdimensional_conditional_prior_factory(conditional_prior_class):
                      boundary=None, **reference_params):
             
             # this fixmakes it possible to open the results.json, casue an issue with the names..  
-            self.orig_name=self.__class__.__name__            
+            self.orig_name=self.__class__.__name__   
+            self.debug_print_out=debug_print_out         
             
             """
 
@@ -141,7 +142,7 @@ def transdimensional_conditional_prior_factory(conditional_prior_class):
             """
             # you have to run it in this ugly way since some things are not defined before the init and you these things in order to constructteh function 
             cls_name = 'Transdimensional{}'.format(conditional_prior_class.__name__)  
-            cond_func =create_cond_function(name,cls_name,componant_function_number,nested_conditional_transdimensional_params,conditional_transdimensional_params,conditional_params,SaveTofile=debug_print_out)                                                    
+            cond_func =create_cond_function(name,cls_name,componant_function_number,nested_conditional_transdimensional_params,conditional_transdimensional_params,conditional_params,SaveTofile=self.debug_print_out)                                                    
             globals()[cond_func.__name__] = cond_func
             #cond_func = self.create_condition_function(name,cls_name,componant_function_number,conditional_transdimensional_params,conditional_params)
                 

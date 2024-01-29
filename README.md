@@ -1,7 +1,9 @@
 # tbilby-sw
 
-
-This project is a suggestion how to structure the tbilby package 
+The tbilby package, a trans-dimensional sampling package based on bilby sampling package! 
+tbilby provides a set of tools and examples to make trans-dimensional sampling quick and easy to set up.
+It provides highly flexable model and priors construction. 
+     
 
 ## Getting started
 
