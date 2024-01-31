@@ -7,10 +7,6 @@ Below are some of the results that can be obtained using the avilable python scr
 	<figcaption>Three Guassian Basic example</figcaption>
 </figure>
 
-<figure>
-	
-	<figcaption>Three Guassian Intermediate example</figcaption>
-</figure>
 
 <figure>
 	<div id="banner">
