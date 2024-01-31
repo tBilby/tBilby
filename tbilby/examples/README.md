@@ -21,8 +21,8 @@ Three Guassian Intermediate example ("Note that the number of component function
 
 <figure>
 	<div class="image-container">
-			<img src="three_gaussian_adv1.png" alt="three_gaussian_adv" width="350" height="350">		
-			<img src="three_gaussian_adv2.png" alt="three_gaussian_adv" width="350" height="350">
+			<img src="three_gauss_adv1.png" alt="three_gaussian_adv" width="350" height="350">		
+			<img src="three_gauss_adv2.png" alt="three_gaussian_adv" width="350" height="350">
 	</div>
 </figure>	
 	Three Guassian Advanced example	
