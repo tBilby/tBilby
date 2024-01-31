@@ -2,7 +2,7 @@
 from abc import ABC, abstractmethod
 
 import bilby
-
+import os
 import numpy as np
 
 
@@ -84,8 +84,12 @@ def create_cond_function(parameter_name,prior_class_name,componant_function_numb
     
     if SaveTofile:    
         keep_functions_for_writing_to_file+=full_function + '\n #---------------#  \n'
-        with open(f'condition_functions/{function_name}.py', 'w') as f:
-            f.write(keep_functions_for_writing_to_file)    
+        # check for folder 
+        if os.path.isdir('condition_functions'):        
+            with open(f'condition_functions/{function_name}.py', 'w') as f:
+                f.write(keep_functions_for_writing_to_file)    
+        else:
+            print('Warning: condition function will not be written to disk, a folder named: condition_functions is missing  ')
     # Execute the function definition using exec
     exec(full_function, globals())
         

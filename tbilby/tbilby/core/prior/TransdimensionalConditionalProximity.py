@@ -67,7 +67,7 @@ class ConditionalUniformReveredGaussian(ConditionalBasePrior):
         # for mu the first axis is the other mus 
         # the second axis is the different samples 
         # use this function to order things according to the request samples number 
-        if val!=None: # this is the probability we have to work hard to set things right     
+        if val is not None: # this is the probability we have to work hard to set things right     
             if isinstance(val,float):
                 val=[val]
             sz = len(val)

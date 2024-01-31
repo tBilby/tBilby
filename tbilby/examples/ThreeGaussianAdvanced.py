@@ -14,7 +14,7 @@ class TransdimensionalConditionalUniform(tbilby.core.prior.TransdimensionalCondi
     # it is an abstract function, without it you cant instantiate this class 
     def transdimensional_condition_function(self,**required_variables):
         ''' setting the mimmum according the the last peak value of the gaussian.
-        # note that this class is not general in any sense, here you refer to the parameters you are 
+        Here you refer to the parameters you are 
         working with '''
         # mu is returned as an array 
         minimum = self.minimum
@@ -28,31 +28,39 @@ class TransdimensionalConditionalBeta(tbilby.core.prior.TransdimensionalConditio
    # one must define the transdimensional_condition_function function, so we know what to do with conditional variables...  
     # it is an abstract function, without it you cant instantiate this class 
     def transdimensional_condition_function(self,**required_variables):
-        ''' setting the mimmum according the the last peak value of the gaussian.
-        # note that this class is not general in any sense, here you refer to the parameters you are 
-        working with '''
+        ''' 
+        note that this specific class implementation is not generally doesnt make much sense,
+        It is used for demonstration 
+        '''
         # here we should have access to all the relevant params 
-        
     
         
-
-        # mu is returned as an array 
         alpha= self.alpha
         beta= self.beta
         minimum = self.minimum       
         if(len(self.mu_l)>0): # handle the first mu case
-            minimum = self.mu_l[-1] # use the previous ones to see the minimum                
+            #minimum = self.mu_l[-1] # use the previous ones to see the minimum                
             # assuming we know that the lorentzian are located where the gusasians, lets have a dynamic prior 
             
             # here you get access to the parameters in the following way:
             # self.mu[trans-dimensional componant number ,sample_number]
-            # so one can expect mu[8,50000] matrix when you are trying to sample 50,000 samples from this prior
+            # one can expect mu[8,50000] matrix when you are trying to sample 50,000 samples from this prior
             # or it could show up as mu[8,] since a single event was requested. 
             
-            # parameters like self.n_gauss, might show up as array-like, array or float, depending on the number of samples requested from the prior   
             
-            # 
-            # take the avg and std as alpha and beta, only for the example purposes, no logic in doing that!!
+            # In bibly parameters like self.n_gauss, might show up as array-like, array or float, depending on the number of samples requested from the prior   
+            # again this is cause the number of samples can change widely from 1 to 100,000 
+            
+            # make sure that we get what we expect
+            self.mu =self.mu.reshape(8,-1)
+                                    
+            
+            # generally, when alpha < beta the left side will peak 
+            # when alpha > beta the right side will peak 
+            # when alpha ~ beta, the two sides will peak similarly  
+            # this doesnt make much sense to use this in real analysis, but for capability demonstration it is good enough
+            
+            # len(mu_l), will give us the order of the lorentzian (i.e the number of componant function we are dealing with) 
             
             if isinstance(self.n_gauss, float):
                 # this means a single sample was requested 
@@ -60,10 +68,16 @@ class TransdimensionalConditionalBeta(tbilby.core.prior.TransdimensionalConditio
                 self.mu=self.mu.reshape(-1,1)
             else:
                 n_g = self.n_gauss
+            # since we know that the gaussian are ordered (due to their conditional mean prior), we can set alpha and beta according to their values      
+            N_componant_function = self.mu_l.shape[0]
             
-            alpha = np.mean(self.mu,axis=0)                
-            beta = np.std(self.mu,axis=0)                
-            
+            beta = np.mean(self.mu[N_componant_function,:])                
+            alpha = np.mean(self.mu[N_componant_function,:])                
+            # skew the distrinution depending on the number of functions we are dealing with 
+            if N_componant_function >= 2: 
+                alpha = np.mean(self.mu[N_componant_function+2,:])/5                                
+            if N_componant_function < 2:     
+                beta =  np.mean(self.mu[N_componant_function+2,:])/5
             
             
             
@@ -143,6 +157,8 @@ priors_t =tbilby.core.base.create_transdimensional_priors(transdimensional_prior
     
     
 samples = priors_t.sample(size=50)
+
+
 # just to see that the conditional works 
 plt.close('all')
 plt.figure()
@@ -150,42 +166,75 @@ plt.plot(samples['mu_l0'],samples['mu_l1'],'o')
 plt.xlabel('mu_l0')
 plt.ylabel('mu_l1')
 
+plt.figure()
+plt.plot(samples['mu_l1'],samples['mu_l2'],'o') 
+plt.xlabel('mu_l1')
+plt.ylabel('mu_l2')
+
+
+
 likelihood = bilby.likelihood.GaussianLikelihood(x, y, model, sigma=Amp_noise*np.ones(len(x)))
 
 # run the smapler 
-result = bilby.core.sampler.run_sampler(
-        likelihood,
-        priors=priors_t,
-        sampler='dynesty',
-        label='Three_gauss_example',
-        clean=True,
-        nlive=10,
-        outdir='outdir',
-       
-    )
+plot_result=True
+if not plot_result: 
+    result = bilby.core.sampler.run_sampler(
+            likelihood,
+            priors=priors_t,
+            sampler='dynesty',
+            label='Three_gauss_example',
+            clean=True,
+            nlive=100,
+            outdir='outdir',
+           
+        )
 
+else:
 
+    result = bilby.result.read_in_result(filename='Three_gauss_example_result.json')
+        
+    # lets check the best number of componant, this is equivalent to comparing BF   
+    plt.figure()
+    plt.subplot(1,2,1)
+    plt.hist(result.posterior['n_gauss'].astype(int),bins=np.arange(9))
+    plt.xlabel('n components')
+    plt.ylabel('freq.')
+    plt.title('n_gauss')
+    plt.subplot(1,2,2)
+    plt.hist(result.posterior['n_lorentzian'].astype(int),bins=np.arange(9))
+    plt.xlabel('n components')
+    plt.ylabel('freq.')
+    plt.title('n_lorentzian')
+        
+    # assuming we got what we wanted..    
+    tbest = result.posterior[(result.posterior['n_gauss']==3) & (result.posterior['n_lorentzian']==3) ]
     
-# lets check the best number of componant, this is equivalent to comparing BF   
-plt.figure()
-plt.hist(result.posterior['n_gauss'].astype(int),bins=np.arange(9))
-plt.xlabel('n components')
-plt.ylabel('freq.')
-   
+    labels = ['mu0','mu1','mu2']
+    samples = tbest[labels].values    
+    fig = corner.corner(samples, labels=labels, quantiles=[0.025, 0.5, 0.975],
+                       show_titles=True, title_kwargs={"fontsize": 12})
+    plt.subplot(3,3,1)
+    plt.vlines(p[1],0,1000)
+    plt.subplot(3,3,5)
+    plt.vlines(p[0],0,1000)
+    plt.subplot(3,3,9)
+    plt.vlines(p[2],0,1000)
     
-# assuming we got what we wanted..    
-tbest = result.posterior[result.posterior['n_gauss']==3]
-
-labels = ['mu0','mu1','mu2']
-samples = tbest[labels].values    
-fig = corner.corner(samples, labels=labels, quantiles=[0.025, 0.5, 0.975],
-                   show_titles=True, title_kwargs={"fontsize": 12})
-plt.subplot(3,3,1)
-plt.vlines(p[1],0,1000)
-plt.subplot(3,3,5)
-plt.vlines(p[0],0,1000)
-plt.subplot(3,3,9)
-plt.vlines(p[2],0,1000)
+    labels = ['mu_l0','mu_l1','mu_l2','mu_l3','mu_l4']
+    samples = tbest[labels].values    
+    fig = corner.corner(samples, labels=labels, quantiles=[0.025, 0.5, 0.975],
+                       show_titles=True, title_kwargs={"fontsize": 12})
+    for j,i in zip(np.arange(5),np.arange(1,25,5)):
+        plt.subplot(5,5,i+j)
+        plt.vlines(p[1],0,1000)
+        #plt.subplot(3,3,5)
+        plt.vlines(p[0],0,1000)
+        #plt.subplot(3,3,9)
+        plt.vlines(p[2],0,1000)
+        
+    
+    
+    
 
 
 #tbest.log_likelihood
