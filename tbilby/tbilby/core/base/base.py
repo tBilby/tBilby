@@ -211,8 +211,8 @@ def create_transdimensional_model(model_function_name, componant_functions_dict,
     polarization_modes=' '
     if returns_polarization:
         function_body+='\n\tresult={}\n\t'
-        function_body+='result[plus]= np.zeros(x.shape, dtype=\'complex128\')\n\t'
-        function_body+='result[cross]= np.zeros(x.shape, dtype=\'complex128\')\n\t'
+        function_body+='result[\'plus\']= np.zeros(x.shape, dtype=\'complex128\')\n\t'
+        function_body+='result[\'cross\']= np.zeros(x.shape, dtype=\'complex128\')\n\t'
         polarization_modes=['[\'plus\']','[\'cross\']']        
     else:
         function_body+='\n\tresult=np.zeros(x.shape)\n\t'
