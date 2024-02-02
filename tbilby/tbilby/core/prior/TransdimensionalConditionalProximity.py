@@ -122,6 +122,8 @@ class ConditionalUniformReveredGaussian(ConditionalBasePrior):
             
             samples[i]=interp1d(cdf[:,i], x.reshape(-1,))(val[i])
       
+        if len(samples)==1:
+            samples=samples[0]
         return samples
         #except:
             # this works for teh full sample togetther - shoudnt work here ....

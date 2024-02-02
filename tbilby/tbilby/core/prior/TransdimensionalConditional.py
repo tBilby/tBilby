@@ -1,5 +1,6 @@
 
 from abc import ABC, abstractmethod
+from .TransInterped import TransInterped
 
 import bilby
 import os
@@ -233,6 +234,12 @@ class TransdimensionalConditionalBeta(transdimensional_conditional_prior_factory
     pass
 
 class TransdimensionalConditionalInterped(transdimensional_conditional_prior_factory(bilby.core.prior.ConditionalInterped)):
+    pass
+
+class ConditionalTransInterped(bilby.prior.conditional.conditional_prior_factory(TransInterped)):
+    pass
+
+class TransdimensionalConditionalTransInterped(transdimensional_conditional_prior_factory(ConditionalTransInterped)):
     pass
 
 
