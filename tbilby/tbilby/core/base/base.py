@@ -1,6 +1,9 @@
 import numpy as np
+import pandas as pd
+
 from bilby.core.utils import infer_parameters_from_function
 import bilby
+from tbilby.core.prior import DiscreteUniform
 
 
 
@@ -309,5 +312,120 @@ def create_plain_priors(prior_class,param_base_name,nmax,prior_dict_to_add=None,
     return prior_dict_to_add 
 
 
+  
+
+def extract_maximal_likelihood_param_values(result,model):
+    '''
+    
+
+    Parameters
+    ----------
+    result : TYPE
+        The result object received froim the run_smapler function.
+    model : TYPE
+        The model function used 
+
+    Returns
+    -------
+    Dict[model parameters] = values which hold the highest log_likelihood value 
+
+    '''
+    
+    result=_fix_posterior_if_needed(result)
+    
+    post_sorted = result.posterior.sort_values(by='log_likelihood',ascending=False).reset_index()
+    best_params_post = post_sorted.iloc[0].to_dict()
+    needed_params = infer_parameters_from_function(model)
+    
+    model_parameters = {k: 0 for k in needed_params} # these are the ghost params + needed params 
+    for k in model_parameters.keys():
+        if k in best_params_post.keys():
+            model_parameters[k]=best_params_post[k]
+    
+    return  model_parameters
+    
+
+def _fix_posterior_if_needed(result):
+    if result.posterior is None:
+        # there was a problem
+        # add the sampling 
+        result.posterior=bilby.result.rejection_sample(result.nested_samples,result.nested_samples.weights)
+        print('no posterior is present, applied rejection_sample to retreive it!! ')
+    return result   
+    
+
+def preprocess_results(result_in: bilby.core.result.Result,model_dict,remove_ghost_samples=True,return_samples_of_most_freq_component_function=True): 
+    '''
+    
+
+    Parameters
+    ----------
+    result_in : bilby.core.result.Result
+        The result object received froim the run_smapler function.
+    model_dict : TYPE
+        The model dictionary used to build the model function.
+    remove_ghost_samples : TYPE, optional
+        DESCRIPTION. The default is True.
+        The will set all the entries that hav higher value then the number of component to NaN
+    return_samples_of_most_freq_component_function : TYPE, optional
+        DESCRIPTION. The default is True.
+        This option will clean the posterior from all the samples that are not in the bin with highest BF (or most freqent visited in transdimensional sampling language)
+
+    Returns
+    -------
+    TYPE
+        proccessed result object.
+
+    '''
+    result=result_in # copy to keep it seperate 
+    
+    result=_fix_posterior_if_needed(result)
+    
+    # identify the discrete variables 
+    discrete_parameters = []
+    for p in result.priors.keys():
+        if type(result.priors[p])==DiscreteUniform:
+            discrete_parameters.append(p)
+    
+    map_discrete_to_parameters={}
+    for k in model_dict.keys():        
+        map_discrete_to_parameters['n_' + k.__name__] = model_dict[k]
+    
+    discrete_parameters_max={}    
+    for dp in discrete_parameters:
+        discrete_parameters_max[dp] = int(result.posterior[dp].max())
+    
+    
+    def sublst(row):
+        
+        for dp in map_discrete_to_parameters.keys():
+            params = map_discrete_to_parameters[dp]
+            for p in params:
+                if not isinstance(p,str):
+                    continue
+                for val in np.arange(row[dp],discrete_parameters_max[dp]):
+                    row[p+str(int(val))]=np.nan # kill the extra entries         
+        return row
 
 
+        
+    
+    if remove_ghost_samples:
+        result.posterior = result.posterior.apply(sublst,axis=1)
+       
+    
+            
+    if return_samples_of_most_freq_component_function:
+        vals = result.posterior.groupby(discrete_parameters).size().sort_values(ascending=False).index[0]    
+        for p_name,val in zip(discrete_parameters,vals):
+            result.posterior=result.posterior[result.posterior[p_name]==int(val)]
+        result.posterior.dropna(inplace=True,axis=1)
+            
+    full_list = list( result.priors.keys())
+    for p in discrete_parameters:
+        full_list.remove(p)
+    
+     
+    cols_set =set(list(result.posterior.columns)).intersection(set(full_list))        
+            
+    return  result,list(cols_set)
