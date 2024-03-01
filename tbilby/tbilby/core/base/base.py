@@ -27,8 +27,7 @@ def create_transdimensional_priors(transdimensional_prior_class,param_name,nmax,
         additional conditional transdimensional parameters which are not related to "alpha", e.g {"beta":3 } , following the example form above  
         alpha1(alpha0,mu0,beta0,beta1,beta2), alpha2(alpha1,alpha0,mu1,mu0,beta0,beta1,beta2), if ["beta"] would be provided, the same componant function as the main variable is assumed, 
         i.e.
-        alpha1(alpha0,mu0,beta0,beta1), alpha2(alpha1,alpha0,mu1,mu0,beta0,beta1,beta2)
-        
+        alpha1(alpha0,mu0,beta0,beta1), alpha2(alpha1,alpha0,mu1,mu0,beta0,beta1,beta2)    
     conditional_params : TYPE
         just normal conditional params, following the example from above with a new 'c' parameter , this will create alpha2(alpha1,alpha0,mu1,mu0,c)   
     prior_dict_to_add : TYPE, optional
@@ -153,11 +152,20 @@ def create_transdimensional_model(model_function_name, componant_functions_dict,
         def sin(frequency_array,a,b):
             return frequency_array
         
+        
+        def poly(frequency_array,coef,deg):
+            return coef frequency_array**deg 
+        
         componant_functions_dict={}
         componant_functions_dict[gaussian]=(2,'amplitude','f0')
-        componant_functions_dict[sin]=(2,'a').
+        componant_functions_dict[sin]=(2,'a')
+        componant_functions_dict[poly]=(5,'coef',True,'deg')
         
-        the key should be the function and the value are the maximal number of componant function, and the parameters that gets modified, the rest are condsiderd as normal params    
+        the key should be the function that serevs as a component function. The values are: the maximal number of componant function, 
+        and the parameters that gets modified, the rest are condsiderd as normal params ,i.e. not trans-dimensional      
+        if True is indicated, it means that this is a special function that uses the number of functions an input to the function itself, 
+        the last item in the list indicates what is the name of that special discrete parameter which serves as the number of functions. 
+        The universe is elegant, just like this solution, isn't it ?   
         
     returns_polarization : bool , optional
         This a bool intended for models that return plus, cross polarization strains
@@ -191,10 +199,23 @@ def create_transdimensional_model(model_function_name, componant_functions_dict,
     
     
     # define the arraies to be iterated on
+    func_deg={}
     for func in componant_functions_dict.keys():
         args_list = infer_parameters_from_function(func)
         nmax= componant_functions_dict[func][0]
         tparams= componant_functions_dict[func][1:]
+        # check if this is a special function, like a polynomial or any other basis function that need the deg as input 
+        is_deg_function=False 
+        
+        if len(tparams)>=2 and isinstance(tparams[-2], bool):
+            is_deg_function=True
+            deg_param = tparams[-1]
+            func_deg[func] = deg_param
+            # remove them from the list 
+            tparams = tparams[:-2]
+            
+                       
+        
         not_tparams = {element for element in args_list if element not in tparams}
         # check that the trans parameters are there
         if not set(tparams).issubset(args_list):
@@ -211,6 +232,11 @@ def create_transdimensional_model(model_function_name, componant_functions_dict,
                     function_body+=']\n\t'
             
         model_function_args_list+= not_tparams    
+        if is_deg_function:
+            # make sure we dont include this paramter in teh def line of the function 
+            model_function_args_list.remove(deg_param)
+        
+        
     polarization_modes=' '
     if returns_polarization:
         function_body+='\n\tresult={}\n\t'
@@ -225,10 +251,20 @@ def create_transdimensional_model(model_function_name, componant_functions_dict,
             args_list = infer_parameters_from_function(func)
             nmax= componant_functions_dict[func][0]
             tparams= componant_functions_dict[func][1:]
+            # this is a special deg function 
+            if func in func_deg.keys():
+                # remove the last entires from the list, they did their job  
+                tparams = tparams[:-2]
+                
+            
             not_tparams = {element for element in args_list if element not in tparams}
             # write doen th efunction with keywords to prevent errors
             local_arg_list=list(not_tparams)
             local_arg_keywords=list(local_arg_list)
+            if func in func_deg.keys():
+                # lodate teh relevant index 
+                inx = local_arg_list.index(func_deg[func])
+                local_arg_list[inx]='n'
             for t in tparams:                                
                 local_arg_list.append(t+'[n]')
                 local_arg_keywords.append(t) 
@@ -247,6 +283,8 @@ def create_transdimensional_model(model_function_name, componant_functions_dict,
     tdegrees=''
     for componant_func in componant_functions_dict.keys():
         tdegrees+='n_'+componant_func.__name__+','
+    
+        
     
     function_signuture = 'def ' + model_function_name + '(x,' + tdegrees + ','.join(set(model_function_args_list)) + '):\n'
     
@@ -346,11 +384,17 @@ def extract_maximal_likelihood_param_values(result,model):
     
 
 def _fix_posterior_if_needed(result):
-    if result.posterior is None:
+    # bilby throw an excpetion no matter how we approch it, let's go overboard with this  
+    try:
+        if result.posterior is None:
         # there was a problem
         # add the sampling 
+            result.posterior=bilby.result.rejection_sample(result.nested_samples,result.nested_samples.weights)
+            print('no posterior is present, applied rejection_sample to retreive it!! ')
+    except:
         result.posterior=bilby.result.rejection_sample(result.nested_samples,result.nested_samples.weights)
         print('no posterior is present, applied rejection_sample to retreive it!! ')
+    
     return result   
     
 
@@ -388,13 +432,12 @@ def preprocess_results(result_in: bilby.core.result.Result,model_dict,remove_gho
             discrete_parameters.append(p)
     
     map_discrete_to_parameters={}
-    for k in model_dict.keys():        
-        map_discrete_to_parameters['n_' + k.__name__] = model_dict[k]
-    
-    discrete_parameters_max={}    
-    for dp in discrete_parameters:
-        discrete_parameters_max[dp] = int(result.posterior[dp].max())
-    
+    discrete_parameters_max={}   
+    for k in model_dict.keys():   
+        dp = 'n_' + k.__name__
+        map_discrete_to_parameters[dp] = model_dict[k]
+        discrete_parameters_max[dp] = model_dict[k][0]
+   
     
     def sublst(row):
         
@@ -411,15 +454,18 @@ def preprocess_results(result_in: bilby.core.result.Result,model_dict,remove_gho
         
     
     if remove_ghost_samples:
-        result.posterior = result.posterior.apply(sublst,axis=1)
+        result.posterior = result.posterior.apply(sublst,axis=1).reset_index(drop=True)
        
     
             
     if return_samples_of_most_freq_component_function:
+        print('grouping by the discrete parameters')
+        print(result.posterior.groupby(discrete_parameters).size().sort_values(ascending=False))
         vals = result.posterior.groupby(discrete_parameters).size().sort_values(ascending=False).index[0]    
         for p_name,val in zip(discrete_parameters,vals):
             result.posterior=result.posterior[result.posterior[p_name]==int(val)]
         result.posterior.dropna(inplace=True,axis=1)
+        result.posterior.reset_index(drop=True,inplace=True)
             
     full_list = list( result.priors.keys())
     for p in discrete_parameters:
@@ -429,3 +475,105 @@ def preprocess_results(result_in: bilby.core.result.Result,model_dict,remove_gho
     cols_set =set(list(result.posterior.columns)).intersection(set(full_list))        
             
     return  result,list(cols_set)
+
+
+
+def _recluster_one_dim_posterior_experimental_use_it_wisely(result,dict_functions_list):
+    '''
+    Dont use this !!!!
+
+    Parameters
+    ----------
+    result : TYPE
+        DESCRIPTION.
+    dict_functions_list : TYPE
+        DESCRIPTION.
+
+    Returns
+    -------
+    res_dict : TYPE
+        DESCRIPTION.
+
+    '''
+    # this probably doesnt work yet 
+    from sklearn.cluster import KMeans
+    #loop over the discrete variable found in param_dict
+    # for each value of the discrete patameter take the values from param_dict[discrete]  = parameter
+    # essamble all of them together and cluster them according to the value of the discrete parameter
+    # each sample should spreadaround equally into the clusters ?? maybe not ?? not sure yet 
+    res_dict={}
+    for function in dict_functions_list.keys():
+        discrete_param= dict_functions_list[function]
+        params_to_clusetr_almost = infer_parameters_from_function(function)
+            
+        
+        for n_clusters in set(result.posterior[discrete_param].values.astype(int)):            
+            relevent_df = result.posterior[result.posterior[discrete_param]==n_clusters]
+            data=[]
+            
+            list_of_params_to_clusetr=[]
+            for param in params_to_clusetr_almost:
+                params_to_clusetr=[]
+                for n in np.arange(n_clusters):                                
+                    if param+str(n) in relevent_df.columns:
+                        params_to_clusetr.append(param+str(n)) # take only the trans-dimenstional one, the rest are common they will not provide additional infomration ot the clustering algo 
+                        list_of_params_to_clusetr.append(param+str(n))
+                        
+                if len(params_to_clusetr) > 0:        
+                    data.append(relevent_df[params_to_clusetr].values.reshape(-1,1))
+                    
+                # extract the data 
+                
+            
+            data = np.squeeze(np.stack(data,axis=1))
+            if len(data.shape)==1:
+                data=data.reshape(-1,1)
+                
+            
+            est = KMeans(n_clusters=n_clusters,init='k-means++', n_init="auto")
+            est.fit(data)                        
+            small_dict = {}
+            
+            params_to_iter = _group_params_by_numerical_ending(list_of_params_to_clusetr)
+            
+            for label,params in zip(set(est.labels_),params_to_iter):
+                
+                Inx = est.labels_==label                
+                small_dict[label] = pd.DataFrame(columns = params , data =  data[Inx])
+                
+                
+            res_dict[discrete_param]={(function,n_clusters): small_dict  }
+            
+    return res_dict       
+            
+            
+            
+def _group_params_by_numerical_ending(arr):
+    groups = {}
+    for word in arr:
+        # Extract the last character(s) from the word
+        if word[-2].isdigit():
+            ending = word[-2:]
+        elif word[-1].isdigit():
+            ending = word[-1]
+        else:
+            # Skip words without numerical endings
+            continue
+        # If the ending is not already in the groups, create a new list for it
+        if ending not in groups:
+            groups[ending] = []
+        # Append the word to the list corresponding to its ending
+        groups[ending].append(word)
+    # Convert the dictionary to a list of tuples
+    result = [ words for ending, words in groups.items()]
+    return result            
+        
+    
+    
+    
+    
+    
+    
+    
+    
+    

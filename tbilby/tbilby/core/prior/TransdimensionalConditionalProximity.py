@@ -112,14 +112,14 @@ class ConditionalUniformReveredGaussian(ConditionalBasePrior):
         sz = len(val)
         samples=np.zeros(sz)
         #define inverse_cdf
-        x = np.linspace(self.minimum, self.maximum, 10000).reshape(-1,1)            
+        x,h = np.linspace(self.minimum, self.maximum, 10000).reshape(-1,1)            
         x_for_cdf = np.tile(x,(1,sz))
         cdf = self.cdf(x_for_cdf)
         
         # numerical claculation of the inverse cdf numerically 
              
         for i in range(sz):
-            
+                    
             samples[i]=interp1d(cdf[:,i], x.reshape(-1,))(val[i])
       
         if len(samples)==1:
@@ -223,4 +223,625 @@ class ConditionalUniformReveredGaussian(ConditionalBasePrior):
                 cdf = 0
         return cdf
 
+    
+
+
+class MarginalizedTruncatedHollowedGaussianOld(ConditionalBasePrior):
+
+    def __init__(self, condition_func, name=None, latex_label=None, unit=None, boundary=None, **reference_params):
+        # reference_params: alpha, beta, sigma_t, sigma_f, minimum_t, maximum_t, minimum_f, maximum_f, index
+        # condition_func: t0, f0 ... t_{n-1}, f_{n-1}
+        """Truncated Hollow Gaussian prior with mean mu, width alpha and hollow width beta
+
+        Parameters
+        ==========
+        mu: float
+            Mean of the Gaussian prior
+        alpha:
+            Width/Standard deviation of the Gaussian prior
+        beta:
+            With of the hollowed out portion of the Gaussian
+        minimum: float
+            See superclass
+        maximum: float
+            See superclass
+        name: str
+            See superclass
+        latex_label: str
+            See superclass
+        unit: str
+            See superclass
+        boundary: str
+            See superclass
+        """
+        super(MarginalizedTruncatedHollowedGaussian, self).__init__(name=name, latex_label=latex_label, unit=unit,
+                                                                    boundary=boundary, condition_func = condition_func,
+                                                                    minimum=reference_params['minimum_t'], maximum=reference_params['maximum_t'])
+        
+        self.__class__.__name__ = 'MarginalizedTruncatedHollowedGaussian'
+        self.__class__.__qualname__ = 'MarginalizedTruncatedHollowedGaussian'
+        self._reference_params = reference_params
+        x = np.linspace(self._reference_params['minimum_t'], self._reference_params['maximum_t'], 10000)
+        
+        
+        self.x=x   
+        self.xx=np.nan
+          
+        
+        
+
+        
+        for key, value in reference_params.items():
+            setattr(self, key, value)
+        self._normalisation = None
+
+                
+    @property
+    def normalisation(self):
+        """ Calculates the proper normalisation of the truncated hollowed Gaussian
+
+        Returns
+        =======
+        float: Proper normalisation of the truncated hollowed Gaussian
+        """
+        return self._normalisation
+        
+    # def inverse_cdf(self,val):
+    #     return self._inverse_cdf(val)
+    
+    def rescale(self, val, **required_variables):
+        """
+        'Rescale' a sample from the unit line element to the appropriate truncated Gaussian prior.
+
+        This maps to the inverse CDF. This has been analytically solved for this case.
+        """
+        self.update_conditions(**required_variables)
+        try:
+
+            samples=np.zeros(len(val))
+            #define inverse_cdf
+            
+            
+            if np.isnan(self.xx ) or self.xx.shape[1] != len(self.f[0]): # do this tsep only if we have to 
+                self.xx = np.zeros((len(self.x),len(self.f[0])))
+                for i in range(len(self.f[0])):
+                    self.xx[:,i] = self.x 
+            
+
+            cdf = self.cdf(self.xx)
+
+            for i in range(len(self.f[0])):
+                samples[i]=interp1d(cdf[:,i], self.x)(val[i])
+
+            return samples
+        except:
+
+            #define inverse_cdf            
+            cdf = self.cdf(self.x)
+            sample=interp1d(cdf, self.x)(val)
+
+            return sample
+        
+        #return erfinv(2 * val * self.normalisation + erf(
+        #    (self.minimum - self.mu) / 2 ** 0.5 / self.sigma)) * 2 ** 0.5 * self.sigma + self.mu
+    def _fix_t_array(self):
+        self.n = len(self.f)
+        if (len(self.t)!=len(self.f)):# should be fixed 
+            if len(self.t)==0:
+                self.t = np.zeros(self.f[0].shape).reshape(1,-1)
+            else:    
+                self.t = np.concatenate((np.zeros(self.f[0].shape).reshape(1,-1),self.t),axis=0)
+        
+        
+        
+    def prob(self, val, **required_variables):
+        """Return the prior probability of val.
+
+        Parameters
+        ==========
+        val: Union[float, int, array_like]
+
+        Returns
+        =======
+        float: Prior probability of val
+        
+        """
+        self.update_conditions(**required_variables)
+        probs = np.zeros(self.f[0].shape)
+        self._fix_t_array()
+       
+        
+        if self.n==1: # meaning we are teh first t
+           return 1/(self.maximum_t-self.minimum_t) # return uniform 
+        
+        normalisation = np.zeros(self.f.shape)
+        # add in the start of t
+        
+        
+        for i in range(self.n):
+     
+            normalisation[i] = (self.alpha**2 * \
+                       (erf((-self.f[i] + self.maximum_f)/(self.alpha * self.sigma_f)) + \
+                        erf((self.f[i] - self.minimum_f)/(self.alpha * self.sigma_f))) *  \
+                       (erf((-self.t[i] + self.maximum_t)/(self.alpha * self.sigma_t)) + \
+                        erf((self.t[i] - self.minimum_t)/(self.alpha * self.sigma_t))) - \
+                        self.beta**2 * \
+                       (erf((-self.f[i] + self.maximum_f)/(self.beta * self.sigma_f)) + \
+                        erf((self.f[i] - self.minimum_f)/(self.beta * self.sigma_f))) *  \
+                       (erf((-self.t[i] + self.maximum_t)/(self.beta * self.sigma_t)) + \
+                        erf((self.t[i] - self.minimum_t)/(self.beta * self.sigma_t)))) / \
+                       (4 * (self.alpha**2 - self.beta**2))
+       
+        
+        for i in range(self.n):
+            probs += (np.exp(-(val-self.t[i])**2/(self.alpha**2 * self.sigma_t**2))* \
+                             self.alpha*(erf((-self.f[i] + self.maximum_f)/(self.alpha * self.sigma_f)) + \
+                                         erf((self.f[i] - self.minimum_f)/(self.alpha * self.sigma_f))) - \
+                             np.exp(-(val-self.t[i])**2/(self.beta**2 * self.sigma_t**2))* \
+                             self.beta*(erf((-self.f[i] + self.maximum_f)/(self.beta * self.sigma_f)) + \
+                                        erf((self.f[i] - self.minimum_f)/(self.beta * self.sigma_f))))\
+                             / (2 * np.sqrt(np.pi) * (self.alpha**2-self.beta**2) * self.sigma_t) \
+                             / normalisation[i]
+                
+        probs = probs * self.is_in_prior_range(val) / self.n        
+        
+        return  probs
+
+    def cdf(self, val, **required_variables):
+        self.update_conditions(**required_variables)
+       
+        self._fix_t_array() 
+        
+        if self.n==1: # meaning we are teh first t , return uniform 
+           return (val - self.minimum_t)/(self.maximum_t - self.minimum_t)
+        
+        
+        normalisation = np.zeros(self.f.shape)
+        _cdf = np.zeros(val.shape)
+        for i in range(self.n):
+    
+           normalisation[i] = (self.alpha**2 * \
+                      (erf((-self.f[i] + self.maximum_f)/(self.alpha * self.sigma_f)) + \
+                       erf((self.f[i] - self.minimum_f)/(self.alpha * self.sigma_f))) *  \
+                      (erf((-self.t[i] + self.maximum_t)/(self.alpha * self.sigma_t)) + \
+                       erf((self.t[i] - self.minimum_t)/(self.alpha * self.sigma_t))) - \
+                       self.beta**2 * \
+                      (erf((-self.f[i] + self.maximum_f)/(self.beta * self.sigma_f)) + \
+                       erf((self.f[i] - self.minimum_f)/(self.beta * self.sigma_f))) *  \
+                      (erf((-self.t[i] + self.maximum_t)/(self.beta * self.sigma_t)) + \
+                       erf((self.t[i] - self.minimum_t)/(self.beta * self.sigma_t)))) / \
+                      (4 * (self.alpha**2 - self.beta**2))
+       
+       
+        for i in range(self.n):
+                  est = (self.alpha**2 * \
+                           (erf((-self.f[i] + self.maximum_f)/(self.alpha * self.sigma_f)) + \
+                            erf((self.f[i] - self.minimum_f)/(self.alpha * self.sigma_f))) *  \
+                           (erf((-self.t[i] + val)/(self.alpha * self.sigma_t)) + \
+                            erf((self.t[i] - self.minimum_t)/(self.alpha * self.sigma_t))) - \
+                            self.beta**2 * \
+                           (erf((-self.f[i] + self.maximum_f)/(self.beta * self.sigma_f)) + \
+                            erf((self.f[i] - self.minimum_f)/(self.beta * self.sigma_f))) *  \
+                           (erf((-self.t[i] + val)/(self.beta * self.sigma_t)) + \
+                            erf((self.t[i] - self.minimum_t)/(self.beta * self.sigma_t)))) / \
+                           (4 * (self.alpha**2 - self.beta**2))
+                        
+                        
+                  _cdf +=   est/normalisation[i]   
+                        
+        _cdf /= self.n
+        try:
+            _cdf[val > self.maximum] = 1
+            _cdf[val < self.minimum] = 0
+        except:
+            if val > self.maximum:
+                _cdf = 1
+            elif val < self.minimum:
+                _cdf = 0
+        return _cdf
+    
+    
+class MarginalizedTruncatedHollowedGaussian(ConditionalBasePrior):
+
+    def __init__(self, condition_func, name=None, latex_label=None, unit=None, boundary=None, **reference_params):
+        # reference_params: alpha, beta, sigma_t, sigma_f, minimum_t, maximum_t, minimum_f, maximum_f, index
+        # condition_func: t0, f0 ... t_{n-1}, f_{n-1}
+        """Truncated Hollow Gaussian prior with mean mu, width alpha and hollow width beta
+
+        Parameters
+        ==========
+        mu: float
+            Mean of the Gaussian prior
+        alpha:
+            Width/Standard deviation of the Gaussian prior
+        beta:
+            With of the hollowed out portion of the Gaussian
+        minimum: float
+            See superclass
+        maximum: float
+            See superclass
+        name: str
+            See superclass
+        latex_label: str
+            See superclass
+        unit: str
+            See superclass
+        boundary: str
+            See superclass
+        """
+        super(MarginalizedTruncatedHollowedGaussian, self).__init__(name=name, latex_label=latex_label, unit=unit,
+                                                                    boundary=boundary, condition_func = condition_func,
+                                                                    minimum=reference_params['minimum_t'], maximum=reference_params['maximum_t'])
+        
+        self.__class__.__name__ = 'MarginalizedTruncatedHollowedGaussian'
+        self.__class__.__qualname__ = 'MarginalizedTruncatedHollowedGaussian'
+        self._reference_params = reference_params
+        x = np.linspace(self._reference_params['minimum_t'], self._reference_params['maximum_t'], 10000)
+        
+        
+        self.x=x   
+        self.xx=np.nan
+          
+        self.add_uniform=True
+        self.gamma=minimum=reference_params['gamma']
+        
+
+        
+        for key, value in reference_params.items():
+            setattr(self, key, value)
+        self._normalisation = None
+
+                
+    @property
+    def normalisation(self):
+        """ Calculates the proper normalisation of the truncated hollowed Gaussian
+
+        Returns
+        =======
+        float: Proper normalisation of the truncated hollowed Gaussian
+        """
+        return self._normalisation
+        
+    # def inverse_cdf(self,val):
+    #     return self._inverse_cdf(val)
+    
+    def rescale(self, val, **required_variables):
+        """
+        'Rescale' a sample from the unit line element to the appropriate truncated Gaussian prior.
+
+        This maps to the inverse CDF. This has been analytically solved for this case.
+        """
+        self.update_conditions(**required_variables)
+        try:
+
+            samples=np.zeros(len(val))
+            #define inverse_cdf
+            
+            
+            if np.isnan(self.xx ) or self.xx.shape[1] != len(self.f[0]): # do this tsep only if we have to 
+                self.xx = np.zeros((len(self.x),len(self.f[0])))
+                for i in range(len(self.f[0])):
+                    self.xx[:,i] = self.x 
+            
+
+            cdf = self.cdf(self.xx)
+
+            for i in range(len(self.f[0])):
+                samples[i]=interp1d(cdf[:,i], self.x)(val[i])
+
+            return samples
+        except:
+
+            #define inverse_cdf            
+            cdf = self.cdf(self.x)
+            sample=interp1d(cdf, self.x)(val)
+
+            return sample
+        
+        #return erfinv(2 * val * self.normalisation + erf(
+        #    (self.minimum - self.mu) / 2 ** 0.5 / self.sigma)) * 2 ** 0.5 * self.sigma + self.mu
+    def _fix_f_array(self):
+        if isinstance(self.f,float):
+            # turn this into array 
+            self.f = np.array([self.f]).reshape((1,1))
+    def _fix_t_array(self):
+        self.n = len(self.t)
+        # if (len(self.t)!=len(self.f)):# should be fixed 
+        #     if len(self.t)==0:
+        #         self.t = np.zeros(self.f[0].shape).reshape(1,-1)
+        #     else:    
+        #         self.t = np.concatenate((np.zeros(self.f[0].shape).reshape(1,-1),self.t),axis=0)
+        
+        
+        
+    def prob(self, val, **required_variables):
+        """Return the prior probability of val.
+
+        Parameters
+        ==========
+        val: Union[float, int, array_like]
+
+        Returns
+        =======
+        float: Prior probability of val
+        
+        """
+        self.update_conditions(**required_variables)
+        self._fix_f_array()
+        self._fix_t_array()
+        #print(self.f)
+        probs = np.zeros(self.f[0].shape)
+        
+       
+        
+        if self.n==0: # meaning we are teh first t
+           return 1/(self.maximum_t-self.minimum_t) # return uniform 
+        
+        normalisation = np.zeros(self.f.shape)
+        # add in the start of t
+        
+        
+        for i in range(self.n):
+     
+            normalisation[i] = (self.alpha**2 * \
+                       (erf((-self.f[i] + self.maximum_f)/(self.alpha * self.sigma_f)) + \
+                        erf((self.f[i] - self.minimum_f)/(self.alpha * self.sigma_f))) *  \
+                       (erf((-self.t[i] + self.maximum_t)/(self.alpha * self.sigma_t)) + \
+                        erf((self.t[i] - self.minimum_t)/(self.alpha * self.sigma_t))) - \
+                        self.beta**2 * \
+                       (erf((-self.f[i] + self.maximum_f)/(self.beta * self.sigma_f)) + \
+                        erf((self.f[i] - self.minimum_f)/(self.beta * self.sigma_f))) *  \
+                       (erf((-self.t[i] + self.maximum_t)/(self.beta * self.sigma_t)) + \
+                        erf((self.t[i] - self.minimum_t)/(self.beta * self.sigma_t)))) / \
+                       (4 * (self.alpha**2 - self.beta**2))
+       
+        
+        for i in range(self.n):
+            probs += (np.exp(-(val-self.t[i])**2/(self.alpha**2 * self.sigma_t**2))* \
+                             self.alpha*(erf((-self.f[i] + self.maximum_f)/(self.alpha * self.sigma_f)) + \
+                                         erf((self.f[i] - self.minimum_f)/(self.alpha * self.sigma_f))) - \
+                             np.exp(-(val-self.t[i])**2/(self.beta**2 * self.sigma_t**2))* \
+                             self.beta*(erf((-self.f[i] + self.maximum_f)/(self.beta * self.sigma_f)) + \
+                                        erf((self.f[i] - self.minimum_f)/(self.beta * self.sigma_f))))\
+                             / (2 * np.sqrt(np.pi) * (self.alpha**2-self.beta**2) * self.sigma_t) \
+                             / normalisation[i]
+                
+        probs = probs * self.is_in_prior_range(val) / self.n        
+        print('dt prob ')
+        print(probs)
+        if self.add_uniform:
+            self.gamma/(self.maximum_t-self.minimum_t) + (1-self.gamma)*probs 
+            
+        
+        
+        return  probs
+
+    def cdf(self, val, **required_variables):
+        self.update_conditions(**required_variables)
+       
+        self._fix_t_array() 
+        
+        if self.n==0: # meaning we are teh first t , return uniform 
+           return (val - self.minimum_t)/(self.maximum_t - self.minimum_t)
+        
+        
+        normalisation = np.zeros(self.f.shape)
+        _cdf = np.zeros(val.shape)
+        for i in range(self.n):
+    
+           normalisation[i] = (self.alpha**2 * \
+                      (erf((-self.f[i] + self.maximum_f)/(self.alpha * self.sigma_f)) + \
+                       erf((self.f[i] - self.minimum_f)/(self.alpha * self.sigma_f))) *  \
+                      (erf((-self.t[i] + self.maximum_t)/(self.alpha * self.sigma_t)) + \
+                       erf((self.t[i] - self.minimum_t)/(self.alpha * self.sigma_t))) - \
+                       self.beta**2 * \
+                      (erf((-self.f[i] + self.maximum_f)/(self.beta * self.sigma_f)) + \
+                       erf((self.f[i] - self.minimum_f)/(self.beta * self.sigma_f))) *  \
+                      (erf((-self.t[i] + self.maximum_t)/(self.beta * self.sigma_t)) + \
+                       erf((self.t[i] - self.minimum_t)/(self.beta * self.sigma_t)))) / \
+                      (4 * (self.alpha**2 - self.beta**2))
+       
+       
+        for i in range(self.n):
+                  est = (self.alpha**2 * \
+                           (erf((-self.f[i] + self.maximum_f)/(self.alpha * self.sigma_f)) + \
+                            erf((self.f[i] - self.minimum_f)/(self.alpha * self.sigma_f))) *  \
+                           (erf((-self.t[i] + val)/(self.alpha * self.sigma_t)) + \
+                            erf((self.t[i] - self.minimum_t)/(self.alpha * self.sigma_t))) - \
+                            self.beta**2 * \
+                           (erf((-self.f[i] + self.maximum_f)/(self.beta * self.sigma_f)) + \
+                            erf((self.f[i] - self.minimum_f)/(self.beta * self.sigma_f))) *  \
+                           (erf((-self.t[i] + val)/(self.beta * self.sigma_t)) + \
+                            erf((self.t[i] - self.minimum_t)/(self.beta * self.sigma_t)))) / \
+                           (4 * (self.alpha**2 - self.beta**2))
+                        
+                        
+                  _cdf +=   est/normalisation[i]   
+                        
+        _cdf /= self.n
+        try:
+            _cdf[val > self.maximum] = 1
+            _cdf[val < self.minimum] = 0
+        except:
+            if val > self.maximum:
+                _cdf = 1
+            elif val < self.minimum:
+                _cdf = 0
+        
+        
+        
+        if self.add_uniform:
+            _cdf = self.gamma*(val-self.minimum_t)/(self.maximum_t-self.minimum_t) + (1-self.gamma)*_cdf 
+        
+        
+        
+        return _cdf
+
+
+
+class ConditionalTruncatedHollowedGaussian(ConditionalBasePrior):
+    def __init__(self, condition_func, name=None, latex_label=None, unit=None, boundary=None, **reference_params):
+        #reference_params:, alpha, beta, sigma_t, sigma_f, minimum_t, maximum_t, minimum_f, maximum_f, index#
+        # condition_fuc: t0, f0, ... t_{n-1}, f_{n-1}, t_n
+        """Truncated Hollow Gaussian prior with mean mu, width alpha and hollow width beta
+
+        Parameters
+        ==========
+        mu: float
+            Mean of the Gaussian prior
+        alpha:
+            Width/Standard deviation of the Gaussian prior
+        beta:
+            With of the hollowed out portion of the Gaussian
+        minimum: float
+            See superclass
+        maximum: float
+            See superclass
+        name: str
+            See superclass
+        latex_label: str
+            See superclass
+        unit: str
+            See superclass
+        boundary: str
+            See superclass
+        """
+        super(ConditionalTruncatedHollowedGaussian, self).__init__(name=name, latex_label=latex_label, unit=unit,
+                                                                   boundary=boundary, condition_func = condition_func,
+                                                                   maximum = reference_params['maximum_f'], minimum=reference_params['minimum_f'] )
+        self.__class__.__name__ = 'ConditionalTruncatedHollowedGaussian'
+        self.__class__.__qualname__ = 'ConditionalTruncatedHollowedGaussian'
+        self._reference_params = reference_params
+        x = np.linspace(self._reference_params['minimum_f'], self._reference_params['maximum_f'], 10000)
+        self.x=x
+        self.xx=np.nan
+        
+        self.add_uniform=True
+        self.gamma=minimum=reference_params['gamma']
+        
+        for key, value in reference_params.items():
+            setattr(self, key, value)
+
+    def prob(self, val, **required_variables):
+        self.update_conditions(**required_variables) # set self.t = t, self.prob_t = prob_t
+        
+        # the first prior is uniform and on top of that we include, this yet not a 2D distribution  
+        self.n = len(self.f)
+        if self.n==0:
+            return 1/(self.maximum_f-self.minimum_f)
+        
+        else:
+            
+            probs_2d = np.zeros(self.f[0].shape)
+            
+            prob_t = np.zeros(self.f.shape)
+            for i in range(self.n):
+                
+                prob_t[i] =(np.exp(-(self.t[self.n-1]-self.t[i])**2/(self.alpha**2 * self.sigma_t**2))* \
+                 self.alpha*(erf((-self.f[i] + self.maximum_f)/(self.alpha * self.sigma_f)) + \
+                             erf((self.f[i] - self.minimum_f)/(self.alpha * self.sigma_f))) - \
+                 np.exp(-(self.t[self.n-1]-self.t[i])**2/(self.beta**2 * self.sigma_t**2))* \
+                 self.beta*(erf((-self.f[i] + self.maximum_f)/(self.beta * self.sigma_f)) + \
+                            erf((self.f[i] - self.minimum_f)/(self.beta * self.sigma_f))))\
+                 / (2 * np.sqrt(np.pi) * (self.alpha**2-self.beta**2) * self.sigma_t)
+            
+            
+       
+            for i in range(self.n):
+                probs_2d += (np.exp(-((val-self.f[i])**2 / self.sigma_f**2 + (self.t[-1]-self.t[i])**2/ self.sigma_t**2)/ self.alpha**2) - \
+                           np.exp(-((val-self.f[i])**2 / self.sigma_f**2 + (self.t[-1]-self.t[i])**2/ self.sigma_t**2)/ self.beta**2)) / \
+                           ( np.pi * self.sigma_t * self.sigma_f * (self.alpha**2 - self.beta**2)) / prob_t[i]
+        
+        
+        probs_2d = probs_2d * self.is_in_prior_range(val) / self.n
+        
+        
+        if self.add_uniform:
+            self.gamma/(self.maximum_f-self.minimum_f) + (1-self.gamma)*probs_2d
+        
+        return probs_2d
+
+ 
+    def rescale(self, val, **required_variables):
+        """
+        'Rescale' a sample from the unit line element to the appropriate truncated Gaussian prior.
+
+        This maps to the inverse CDF. This has been analytically solved for this case.
+        """
+        self.update_conditions(**required_variables) # set self.t = t, self.prob_t = prob_t
+        try:
+            samples=np.zeros(len(val))
+
+            #define inverse_cdf
+            
+            
+            
+            if np.isnan(self.xx ) or self.xx.shape[1] != len(self.t[0]): # do this tsep only if we have to 
+                self.xx = np.zeros((len(self.x),len(self.t[0])))
+                for i in range(len(self.t[0])):
+                    self.xx[:,i] = self.x 
+                        
+            
+            cdf = self.cdf(self.xx)
+
+            for i in range(len(self.t[0])):
+                samples[i]=interp1d(cdf[:,i], self.x)(val[i])
+
+            return samples
+        except:
+
+            #define inverse_cdf
+           
+            cdf = self.cdf(self.x)
+            sample=interp1d(cdf, self.x)(val)
+
+            return sample
+
+    def cdf(self, val, **required_variables):
+        self.update_conditions(**required_variables) # set self.t = t, self.prob_t = prob_t
+        
+        self.n = len(self.f)
+        
+        if self.n==0:
+            return (val - self.minimum_f)/(self.maximum_f - self.minimum_f)
+        
+        else:
+            _cdf = np.zeros(val.shape)            
+            prob_t = np.zeros(self.f.shape)
+            for i in range(self.n):
+                
+                prob_t[i] =(np.exp(-(self.t[self.n-1]-self.t[i])**2/(self.alpha**2 * self.sigma_t**2))* \
+                 self.alpha*(erf((-self.f[i] + self.maximum_f)/(self.alpha * self.sigma_f)) + \
+                             erf((self.f[i] - self.minimum_f)/(self.alpha * self.sigma_f))) - \
+                 np.exp(-(self.t[self.n-1]-self.t[i])**2/(self.beta**2 * self.sigma_t**2))* \
+                 self.beta*(erf((-self.f[i] + self.maximum_f)/(self.beta * self.sigma_f)) + \
+                            erf((self.f[i] - self.minimum_f)/(self.beta * self.sigma_f))))\
+                 / (2 * np.sqrt(np.pi) * (self.alpha**2-self.beta**2) * self.sigma_t)
+            
+            
+            for i in range(self.n):
+                _cdf += (np.exp(-(self.t[self.n-1]-self.t[i])**2/(self.alpha**2 * self.sigma_t**2))* \
+                     self.alpha*(erf((-self.f[i] + val)/(self.alpha * self.sigma_f)) + \
+                                 erf((self.f[i] - self.minimum_f)/(self.alpha * self.sigma_f))) - \
+                     np.exp(-(self.t[self.n-1]-self.t[i])**2/(self.beta**2 * self.sigma_t**2))* \
+                     self.beta*(erf((-self.f[i] + val)/(self.beta * self.sigma_f)) + \
+                                erf((self.f[i] - self.minimum_f)/(self.beta * self.sigma_f))))\
+                     / (2 * np.sqrt(np.pi) * (self.alpha**2-self.beta**2) * self.sigma_t) / prob_t[i]
+        
+        _cdf /= self.n
+        try:
+            _cdf[val > self.maximum] = 1
+            _cdf[val < self.minimum] = 0
+            
+        except:
+            if val > self.maximum:
+                _cdf = 1
+            elif val < self.minimum:
+                _cdf = 0 
+                
+        if self.add_uniform:
+            _cdf = self.gamma*(val-self.minimum_f)/(self.maximum_f-self.minimum_f) + (1-self.gamma)*_cdf 
+                
+                
+        return _cdf
     

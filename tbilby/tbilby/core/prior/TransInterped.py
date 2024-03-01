@@ -54,6 +54,7 @@ class TransInterped(bilby.core.prior.Prior):
         maximum = float(np.nanmin(np.array((max(xx), maximum))))
         self.trans_min = minimum
         self.trans_max = maximum
+        self.init_once = False
         
         super(TransInterped, self).__init__(name=name, latex_label=latex_label, unit=unit,
                                        minimum=minimum, maximum=maximum, boundary=boundary)
@@ -155,8 +156,8 @@ class TransInterped(bilby.core.prior.Prior):
                 raise ValueError('Minimum cannot be set below {}.'.format(round(self.min_limit, 2)))    
             
         self._maximum = maximum
-        if '_minimum' in self.__dict__ and self._minimum < np.inf:
-            self._update_instance()
+        #if '_minimum' in self.__dict__ and self._minimum < np.inf:
+        #    self._update_instance()
 
     @property
     def yy(self):
@@ -183,12 +184,16 @@ class TransInterped(bilby.core.prior.Prior):
         self._initialize_attributes()
 
     def _initialize_attributes(self):
+        if(self.init_once): # make sure we dont run over our modifications 
+            return         
         from scipy.integrate import cumtrapz
         if np.trapz(self._yy, self.xx) != 1:
             print('Supplied PDF for {} is not normalised, normalising.'.format(self.name))
         self.YYnotNorm = cumtrapz(self._yy, self.xx, initial=0)
         self.Normalizer_calc = interp1d(x=self.xx, y=self.YYnotNorm, bounds_error=False, fill_value=0)
         self.Inv_Normalizer_calc = interp1d(x=self.YYnotNorm, y=self.xx, bounds_error=False, fill_value=0)
+        
+        
         self._yy /= np.trapz(self._yy, self.xx)
         self.YY = cumtrapz(self._yy, self.xx, initial=0)
         # Need last element of cumulative distribution to be exactly one.
@@ -196,5 +201,6 @@ class TransInterped(bilby.core.prior.Prior):
         self.probability_density = interp1d(x=self.xx, y=self._yy, bounds_error=False, fill_value=0)
         self.cumulative_distribution = interp1d(x=self.xx, y=self.YY, bounds_error=False, fill_value=(0, 1))
         self.inverse_cumulative_distribution = interp1d(x=self.YY, y=self.xx, bounds_error=True)
+        self.init_once=True
 
 

@@ -176,8 +176,10 @@ plt.ylabel('mu_l2')
 likelihood = bilby.likelihood.GaussianLikelihood(x, y, model, sigma=Amp_noise*np.ones(len(x)))
 
 # run the smapler 
+run_sampler =True 
 plot_result=True
-if not plot_result: 
+
+if run_sampler: 
     result = bilby.core.sampler.run_sampler(
             likelihood,
             priors=priors_t,
@@ -189,8 +191,11 @@ if not plot_result:
            
         )
 
-else:
-
+if plot_result:
+    
+    # below there are some cool function to help you get the plots that you want, at the very end of the script  
+    # there are even more useful one, so it worth going over the example until the very end of it 
+    
     result = bilby.result.read_in_result(filename='Three_gauss_example_result.json')
         
     # lets check the best number of componant, this is equivalent to comparing BF   
@@ -232,9 +237,37 @@ else:
         #plt.subplot(3,3,9)
         plt.vlines(p[2],0,1000)
         
+        
+        
+    
+    # utilizing tbilby tools for plotting and error estimation 
+    
+    # as the name indicates 
+    tbilby.corner_plot_discrete_params(result,filename='n_dist.png')
+    
+    tbilby.corner_plot_single_component_function(result, lorentzian, order=1, not_tparams= ['sigma_l','A'], filename='lorentzian_1.png')
+    tbilby.corner_plot_single_transdimentional_component_functions(result,lorentzian,filename='mu_l_all_orders')    
+    
+    # this will do the processing of the results for you, remove ghost parameters and return the function which is most likely from the data based on samplign frequency, which should be the same as BF    
+    result_processed,cols = tbilby.core.base.preprocess_results(result,componant_functions_dict,remove_ghost_samples=False,return_samples_of_most_freq_component_function=True)
+    tbilby.corner_plot_single_transdimenstional_param(result_processed,'mu',filename='mu_g.png')
+    tbilby.corner_plot_single_transdimenstional_param(result_processed,'mu_l',filename='mu_l.png')
+    
+    # find the best maximum likelihood fit for you 
+    best_params_post = tbilby.core.base.extract_maximal_likelihood_param_values(result_processed, model)
+    # sample from the posterior 
+    sampled_params = result_processed.posterior.sample(1).to_dict('records')[0] # it creates a list, we take it single value  
+    del sampled_params['log_likelihood']
+    del sampled_params['log_prior']
+    
+    plt.figure()
+    plt.plot(x,y,'-oc',label='Data')
+    plt.plot(x,model(x,**best_params_post),'-r',label='MLE')
+    plt.plot(x,model(x,**sampled_params),'-k',label='Posterior sampled params ')
+    plt.legend()
+    plt.grid(True)
+    
     
     
     
 
-
-#tbest.log_likelihood

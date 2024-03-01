@@ -16,11 +16,22 @@ class TransdimensionalConditionalUniform(tbilby.core.prior.TransdimensionalCondi
         # note that this class is not general in any sense, here you refer to the parameters you are 
         working with '''
         # mu is returned as an array 
+        
         minimum = self.minimum
+        maximum = 100        
         if(len(self.mu)>0): # handle the first mu case
-            minimum = self.mu[-1]               
-            setattr(self,'minimum',minimum)  # setting the atribute of the class
-        return dict(minimum=minimum)
+            minimum = self.mu[-1]   
+            maximum = 100*np.ones(self.mu[-1].shape)
+            
+            if isinstance(minimum, float):
+                if len(self.mu) >= self.n_gauss:
+                    minimum=-100
+                    maximum=0
+            else:                
+                minimum[len(self.mu) >= self.n_gauss]=-100
+                maximum[len(self.mu) >= self.n_gauss]=0
+                                          
+        return dict(minimum=minimum,maximum=maximum)
  
 
 
@@ -32,9 +43,10 @@ Amp_noise=0.05
 def gauss(x,mu,sigma_g):
     return norm(mu,sigma_g).pdf(x)
 # here we define a model which could be a sum of several functions.. 
-componant_functions_dict={}
-componant_functions_dict[gauss]=(n_peaks,'mu')
-model = tbilby.core.base.create_transdimensional_model('model',  componant_functions_dict,returns_polarization=False,SaveTofile=True)
+component_functions_dict={}
+component_functions_dict[gauss]=(n_peaks,'mu')
+model = tbilby.core.base.create_transdimensional_model('model',  component_functions_dict,\
+                                                       returns_polarization=False,SaveTofile=True)
 
 # create some data to work with 
 random.seed(10)
@@ -55,35 +67,43 @@ priors_t =tbilby.core.base.create_transdimensional_priors(transdimensional_prior
                                                           nmax= n_peaks,\
                                                           nested_conditional_transdimensional_params=['mu'],\
                                                           conditional_transdimensional_params=[],\
-                                                          conditional_params=[],\
+                                                          conditional_params=['n_gauss'],\
                                                           prior_dict_to_add=priors_t,\
-                                                          SaveConditionFunctionsToFile=False,\
+                                                          SaveConditionFunctionsToFile=True,\
                                                           minimum= 0,maximum=100)
+
+    
+    
 samples = priors_t.sample(size=50000)
 # just to see that the conditional works 
 
 plt.figure()
-plt.plot(samples['mu0'],samples['mu1'],'o') 
-plt.xlabel('mu0')
+plt.plot(samples['n_gauss'],samples['mu1'],'o') 
+plt.xlabel('n_gauss')
 plt.ylabel('mu1')
 
 likelihood = bilby.likelihood.GaussianLikelihood(x, y, model, sigma=Amp_noise*np.ones(len(x)))
 
+skip= False
 # run the smapler 
-result = bilby.core.sampler.run_sampler(
-        likelihood,
-        priors=priors_t,
-        sampler='dynesty',
-        label='Three_gauss_example',
-        clean=True,
-        nlive=10,
-        outdir='outdir',
-       
-    )
+if not skip:
+    result = bilby.core.sampler.run_sampler(
+            likelihood,
+            priors=priors_t,
+            sampler='dynesty',
+            label='Three_gauss_example',
+            clean=True,
+            nlive=10,
+            outdir='outdir',
+           
+        )
+
+result = bilby.result.read_in_result(filename='Three_gauss_experiment_result.json')
 
 
     
 # lets check the best number of componant, this is equivalent to comparing BF   
+#result.posterior = result.nested_samples
 plt.figure()
 plt.hist(result.posterior['n_gauss'].astype(int),bins=np.arange(9))
 plt.xlabel('n components')

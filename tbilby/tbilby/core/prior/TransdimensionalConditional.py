@@ -1,10 +1,58 @@
 
 from abc import ABC, abstractmethod
 from .TransInterped import TransInterped
+from .DiscreteUniform import DiscreteUniform
+from .TransdimensionalConditionalProximity import ConditionalUniformReveredGaussian,ConditionalTruncatedHollowedGaussian,MarginalizedTruncatedHollowedGaussian
 
 import bilby
 import os
 import numpy as np
+
+
+
+
+
+def _process_input(input_list):
+    output_dict = {}
+    output_list = []
+    
+    
+    if isinstance(input_list, list):
+    
+        for item in input_list:
+            if isinstance(item, list): # this referese to a list that might be 
+                output_list.append(_process_input(item)) # my god this is recursive 
+            elif isinstance(item, dict):
+                output_dict = item
+            else:
+                output_list.append(item)
+    
+    if isinstance(input_list, dict):
+        output_dict = input_list.copy()
+    
+    return output_dict, output_list
+
+
+def _validate_parameters_shape(parameters): # this makes sure we have a single standard the works, 
+# so the poor user will not have to do it by himself 
+    
+    #print(parameters)
+    #print('here ')
+    
+    for key, value in parameters.items():
+        # if these are just regualr float we are fine, but we should be carful with arrays of size 1X1 or (1,)
+        # these oe must turn into float back to restore peace to a troubled world 
+        if isinstance(parameters[key], np.ndarray):
+            if len(parameters[key])>0: # this means it is not an empty one  
+                if len(parameters[key].shape)==1:# meaning(x,) format 
+                    if parameters[key].shape[0]==1: # meaning it is of size 1 
+                        parameters[key]=parameters[key][0] # halaluiah 
+                else: 
+                    if parameters[key].shape[0]*parameters[key].shape[1]==1:
+                        parameters[key]=parameters[key][0,0]
+    
+        # this was very ugly..... I am sure there is a more elegant way to do that  
+    return parameters 
 
 
 def create_cond_function(parameter_name,prior_class_name,componant_function_number,nested_conditional_transdimensional_params,conditional_transdimensional_params,conditional_params,SaveTofile=False):
@@ -22,24 +70,31 @@ def create_cond_function(parameter_name,prior_class_name,componant_function_numb
         function_lines += '\n\t' + t + '=np.array(['+ ', '.join(targs) + '])'
         
     # take care of the non nested trans params     
+    
+    conditional_transdimensional_params_dict,conditional_transdimensional_params_list = _process_input(conditional_transdimensional_params)
     if len(conditional_transdimensional_params) > 0: # check we got something
-        if isinstance(conditional_transdimensional_params,dict):
-            for t in conditional_transdimensional_params.keys():
+                
+        if len(conditional_transdimensional_params_dict)>0:
+            for t in conditional_transdimensional_params_dict.keys():
                 targs=[]               
-                for n in np.arange(conditional_transdimensional_params[t]): # this is independed of the number of componant functions 
+                for n in np.arange(conditional_transdimensional_params_dict[t]): # this is independed of the number of componant functions 
                     arguments.append(t+str(n))
                     targs.append(t+str(n))
                 function_lines += '\n\t' + t + '=np.array(['+ ', '.join(targs) + '])' 
                                    
-        elif isinstance(conditional_transdimensional_params, list):
-            for t in conditional_transdimensional_params:
+        if len(conditional_transdimensional_params_list)>0:
+            for t in conditional_transdimensional_params_list:                
                 targs=[]               
                 for n in np.arange(componant_function_number+1): #+1 so it takes the last  level as well
                     arguments.append(t+str(n))
                     targs.append(t+str(n))
                 function_lines += '\n\t' + t + '=np.array(['+ ', '.join(targs) + '])'             
-        else:
-            raise Exception('conditional_transdimensional_params is not alist or a dict, not sure how to handle this, sorry.   ')
+    
+            # we might got a mix of teh two types 
+            
+            
+        if(len(conditional_transdimensional_params_dict)==0 and len(conditional_transdimensional_params_list)==0):    
+            raise Exception('conditional_transdimensional_params is an empty list or a dict, not sure how to handle this, sorry.   ')
 
     
     
@@ -58,8 +113,10 @@ def create_cond_function(parameter_name,prior_class_name,componant_function_numb
             return_statment +=','
     
     # non - nested conditional    
-    if isinstance(conditional_transdimensional_params,dict): # turn into a list, we are done with the dict 
-        conditional_transdimensional_params = list(conditional_transdimensional_params.keys()).copy()
+     # turn into a list, we are done with the dict 
+    conditional_transdimensional_params = list(conditional_transdimensional_params_dict.keys()).copy()
+    conditional_transdimensional_params += conditional_transdimensional_params_list
+    
     if(len(conditional_transdimensional_params)>0):
         return_statment +=',' 
         
@@ -169,11 +226,78 @@ def transdimensional_conditional_prior_factory(conditional_prior_class):
             self.nested_conditional_transdimensional_params=nested_conditional_transdimensional_params
             self.conditional_transdimensional_params=conditional_transdimensional_params
             self.conditional_params=conditional_params
+        
+        def _get_size(self,t_parameter,**required_variables):   
+            first_param = t_parameter+'0'
+            var  = required_variables[first_param]
+            # let's explore it
+            sample_size = 0 
+            if isinstance(var, np.ndarray):
+                sample_size = len(required_variables[first_param])
+            if isinstance(var, (float, np.float64)):   
+                sample_size = 1 
+            return sample_size
+        
+        
+        def _standardize_internal_attributes(self,**required_variables):
+            # go over the conditional variables (not the normal ones, there is no need ), and do the following for transdimensional variables:
+            # self.var. shape = [n_nested, n_samples]    
+            if len(required_variables)==0:# we got an empty list, that a problem , not sure what to do, do no harm !!!   
+                return 
+            #print(self)
+            #print(required_variables)
+            #print(self.nested_conditional_transdimensional_params)
+            sample_size = -1 # give it non-possible value  
+            conditional_transdimensional_params_dict,conditional_transdimensional_params_list = _process_input(self.conditional_transdimensional_params)
+            
+            if self.componant_function_number>0: # meaning we have some data in the nested paramters             
+                for t_parameter in self.nested_conditional_transdimensional_params:
+                    sample_size = self._get_size(t_parameter,**required_variables)
+                    break 
+            # try to get the sample size some other way 
+            if sample_size< 0 and len(conditional_transdimensional_params_dict) > 0:     
+                for t_parameter in conditional_transdimensional_params_dict.keys():
+                    sample_size = self._get_size(t_parameter,**required_variables)
+                    break 
+                        
+            if sample_size< 0 and len(conditional_transdimensional_params_list) > 0:     
+                for t_parameter in conditional_transdimensional_params_list:
+                    sample_size = self._get_size(t_parameter,**required_variables)
+                    break 
+                
+                
+                
+                
+            if sample_size < -1 and (len(conditional_transdimensional_params_list) + len(conditional_transdimensional_params_dict)+ self.componant_function_number) > 0  :
+                print('An issue with the transdimensional data ! couldnt retrieve  the sample size ')
+                return 
+                
+            #fix  nested params 
+            if sample_size > 0: 
+                fix_vars = self.nested_conditional_transdimensional_params +\
+                    list(conditional_transdimensional_params_dict.keys())  +\
+                    conditional_transdimensional_params_list    
+                for t_parameter in fix_vars:                
+                    param =  (getattr(self,t_parameter))  
+                    setattr(self,t_parameter,param.reshape(-1,sample_size))  
+                     
+                    
+            # done !!!!!!!    
+                            
+                
+    
             
         def update_conditions(self, **required_variables):    
             # this will update the params 
+           
             super(TransdimensionalConditionalPrior,self).update_conditions(**required_variables)
+            
+            self._standardize_internal_attributes(**required_variables) 
+            
             parameters = self.transdimensional_condition_function(**required_variables) 
+            
+            parameters= _validate_parameters_shape(parameters)
+            
             for key, value in parameters.items():
                 if key in self.transdimesional_params_data_holder_dict.keys():
                     self.transdimesional_params_data_holder_dict[key]=value
@@ -229,6 +353,9 @@ def transdimensional_conditional_prior_factory(conditional_prior_class):
 class TransdimensionalConditionalUniform(transdimensional_conditional_prior_factory(bilby.core.prior.ConditionalUniform)):
     pass
 
+class TransdimensionalConditionalLogUniform(transdimensional_conditional_prior_factory(bilby.core.prior.ConditionalLogUniform)):
+    pass
+
 
 class TransdimensionalConditionalBeta(transdimensional_conditional_prior_factory(bilby.core.prior.ConditionalBeta)):
     pass
@@ -242,4 +369,19 @@ class ConditionalTransInterped(bilby.prior.conditional.conditional_prior_factory
 class TransdimensionalConditionalTransInterped(transdimensional_conditional_prior_factory(ConditionalTransInterped)):
     pass
 
+
+class TransdimensionalConditionalReversedGaussian(transdimensional_conditional_prior_factory(ConditionalUniformReveredGaussian)):
+    pass
+
+class TransdimensionalConditionalTruncatedHollowedGaussian(transdimensional_conditional_prior_factory(ConditionalTruncatedHollowedGaussian)):
+    pass
+
+class TransdimensionalConditionalMarginalizedTruncatedHollowedGaussian(transdimensional_conditional_prior_factory(MarginalizedTruncatedHollowedGaussian)):
+    pass
+
+class ConditionalDiscreteUniform(bilby.prior.conditional.conditional_prior_factory(DiscreteUniform)):
+    pass
+
+class TransdimensionalConditionalDiscreteUniform(transdimensional_conditional_prior_factory(ConditionalDiscreteUniform)):
+    pass
 
