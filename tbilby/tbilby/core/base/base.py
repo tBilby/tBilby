@@ -133,7 +133,7 @@ def _create_priors_with_nested_condition_functions(prior_class,param_base_name='
 
 
 
-def create_transdimensional_model(model_function_name, componant_functions_dict, returns_polarization=True,print_out=False,SaveTofile=False):
+def create_transdimensional_model(model_function_name, componant_functions_dict, returns_polarization=True,Complex_output=False,print_out=False,SaveTofile=False):
     '''
     
 
@@ -240,8 +240,12 @@ def create_transdimensional_model(model_function_name, componant_functions_dict,
     polarization_modes=' '
     if returns_polarization:
         function_body+='\n\tresult={}\n\t'
-        function_body+='result[\'plus\']= np.zeros(x.shape, dtype=\'complex128\')\n\t'
-        function_body+='result[\'cross\']= np.zeros(x.shape, dtype=\'complex128\')\n\t'
+        if Complex_output:
+            function_body+='result[\'plus\']= np.zeros(x.shape, dtype=\'complex128\')\n\t'
+            function_body+='result[\'cross\']= np.zeros(x.shape, dtype=\'complex128\')\n\t'
+        else:
+            function_body+='result[\'plus\']= np.zeros(x.shape)\n\t'
+            function_body+='result[\'cross\']= np.zeros(x.shape)\n\t'
         polarization_modes=['[\'plus\']','[\'cross\']']        
     else:
         function_body+='\n\tresult=np.zeros(x.shape)\n\t'
@@ -352,7 +356,7 @@ def create_plain_priors(prior_class,param_base_name,nmax,prior_dict_to_add=None,
 
   
 
-def extract_maximal_likelihood_param_values(result,model):
+def extract_maximal_likelihood_param_values(result,median=False,mean=False,model=None):
     '''
     
 
@@ -373,13 +377,21 @@ def extract_maximal_likelihood_param_values(result,model):
     
     post_sorted = result.posterior.sort_values(by='log_likelihood',ascending=False).reset_index()
     best_params_post = post_sorted.iloc[0].to_dict()
-    needed_params = infer_parameters_from_function(model)
     
-    model_parameters = {k: 0 for k in needed_params} # these are the ghost params + needed params 
-    for k in model_parameters.keys():
-        if k in best_params_post.keys():
-            model_parameters[k]=best_params_post[k]
+    if median:
+        best_params_post = post_sorted.median().to_dict()
+    if mean:
+        best_params_post = post_sorted.mean().to_dict()    
     
+    model_parameters = best_params_post
+    if model is not None:
+        needed_params = infer_parameters_from_function(model)
+    
+        model_parameters = {k: 0 for k in needed_params} # these are the ghost params + needed params 
+        for k in model_parameters.keys():
+            if k in best_params_post.keys():
+                model_parameters[k]=best_params_post[k]
+                
     return  model_parameters
     
 
@@ -418,7 +430,7 @@ def preprocess_results(result_in: bilby.core.result.Result,model_dict,remove_gho
     Returns
     -------
     TYPE
-        proccessed result object.
+        proccessed result object, columns of the posterior
 
     '''
     result=result_in # copy to keep it seperate 
@@ -430,6 +442,10 @@ def preprocess_results(result_in: bilby.core.result.Result,model_dict,remove_gho
     for p in result.priors.keys():
         if type(result.priors[p])==DiscreteUniform:
             discrete_parameters.append(p)
+    
+    if  len(discrete_parameters)==0:
+        print('coudlnt find any discrete parameters, maybe thiis is not a real transdimensional sampleing ? quitting this function, nothing else matters  ')
+        return result_in, list(result_in.posterior.columns)
     
     map_discrete_to_parameters={}
     discrete_parameters_max={}   
@@ -462,6 +478,9 @@ def preprocess_results(result_in: bilby.core.result.Result,model_dict,remove_gho
         print('grouping by the discrete parameters')
         print(result.posterior.groupby(discrete_parameters).size().sort_values(ascending=False))
         vals = result.posterior.groupby(discrete_parameters).size().sort_values(ascending=False).index[0]    
+        if  isinstance(vals, (float,np.float64) ):
+            vals=[vals]
+        
         for p_name,val in zip(discrete_parameters,vals):
             result.posterior=result.posterior[result.posterior[p_name]==int(val)]
         result.posterior.dropna(inplace=True,axis=1)

@@ -232,10 +232,16 @@ def transdimensional_conditional_prior_factory(conditional_prior_class):
             var  = required_variables[first_param]
             # let's explore it
             sample_size = 0 
-            if isinstance(var, np.ndarray):
-                sample_size = len(required_variables[first_param])
             if isinstance(var, (float, np.float64)):   
                 sample_size = 1 
+            
+            
+            if isinstance(var, np.ndarray):
+                if var.shape ==():
+                    sample_size =1                
+                else:
+                    sample_size = len(required_variables[first_param])
+            
             return sample_size
         
         

@@ -5,6 +5,7 @@ from bilby.core.utils import infer_parameters_from_function
 import numpy as np
 import matplotlib.pyplot as plt
 import arviz as az
+import corner
 
 def corner_plot_discrete_params(result,filename=None,**kwargs):
     '''
@@ -32,10 +33,63 @@ def corner_plot_discrete_params(result,filename=None,**kwargs):
     SaveTofile=True
     if filename is None:
         SaveTofile=False 
+                
+    if  len(discrete_parameters)==0:
+        print('coudlnt find any discrete parameters, maybe thiis is not a real transdimensional sampleing ? quitting this function, nothing else matters  ')
+        return 
         
-                 
-            
-    result.plot_corner(discrete_parameters,SaveTofile=SaveTofile,filename=filename ,**kwargs)     
+    result.plot_corner(discrete_parameters,SaveTofile=SaveTofile,filename=filename ,**kwargs)  
+    
+    # tbilby addition... check the nested samples before the rejection sampling to verify teh process
+    # and maybe to calculate the BF using these incase the discrete distribution peaks at one particular value? 
+    
+    
+    
+    from scipy.special import logsumexp
+    Z_tot = logsumexp(np.log(result.nested_samples['weights'])+result.nested_samples['log_likelihood'])
+    
+    grs = result.nested_samples.groupby(discrete_parameters)
+    dict_ln_Z={}
+    for gr in grs:
+        Z_gr = logsumexp(np.log(gr[1]['weights'])+gr[1]['log_likelihood'])
+        dict_ln_Z[gr[0]]=Z_gr
+
+    log_Z_max = dict_ln_Z[max(dict_ln_Z, key=dict_ln_Z.get) ]
+    # keep only somewhat "relevant" values 
+    dict_ln_Z = {key: dict_ln_Z[key] for key in dict_ln_Z.keys() if log_Z_max-dict_ln_Z[key]<=50}
+       
+    
+    
+    
+    
+    
+
+    
+    samples = result.nested_samples[discrete_parameters]    
+    fig = corner.corner(samples, labels=discrete_parameters)        
+    plt.show()
+    
+    if SaveTofile:
+        plt.savefig('tBilby_' + filename)
+        plt.close()
+    
+    
+    def addlabels(x,y):
+        for i in range(len(x)):
+            plt.text(i,y[i],'%s' % float('%.3g' % y[i]))
+    
+    plt.figure()
+    x,y =range(len(dict_ln_Z)), log_Z_max-np.array(list(dict_ln_Z.values()))
+    plt.bar(x,y, align='center')
+    plt.xticks(range(len(dict_ln_Z)), list(dict_ln_Z.keys()))
+    addlabels(x, y)
+    plt.xlabel('Discrete variables')
+    plt.ylabel('$\log{BF}$')
+    plt.show()
+    
+    if SaveTofile:
+        plt.savefig('tBilby_log_Z_' + filename)
+        plt.close()
     
     
 def corner_plot_single_transdimenstional_param(result,param,overlay=False, filename=None,**kwargs):
@@ -73,13 +127,17 @@ def corner_plot_single_transdimenstional_param(result,param,overlay=False, filen
     result = _fix_range_issue(result)
     
     cols=list(result.posterior.columns)   
-  
+    
     if isinstance(param, str):
         param=[param]
     
     
     for p in param:
         locs_params = sorted(_extract_words_with_numeric_suffix(partial_words=[p], full_words=cols))
+    
+    if len(locs_params)==0:
+        print('WARNING: Couldn\'t  find the parameter you wanted to plot, maybe there is a misspeling ?')
+        return 
     
     if overlay==False:        
         if filename is not None:
@@ -88,8 +146,15 @@ def corner_plot_single_transdimenstional_param(result,param,overlay=False, filen
             result.plot_corner(locs_params,SaveTofile=SaveTofile,filename=p+'.png' ,**kwargs)
     else:
         plt.figure()
+        # find teh optimal bins settings
+        data = result.posterior[locs_params].values.reshape(-1,1)
+        bins = np.histogram_bin_edges(data,bins= 'fd')
+        
         for p in locs_params:
-            plt.hist(result.posterior[p],bins=50,alpha = 0.6 )
+            plt.hist(result.posterior[p],bins=bins,alpha = 0.6, label = p )
+        plt.xlabel(param[0])    
+        plt.ylabel('Counts')    
+        plt.legend()
         if filename is not None:
             plt.savefig(filename)
             plt.close()    

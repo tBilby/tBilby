@@ -15,8 +15,20 @@ from scipy.special import erf, erfinv
 
 
 
- 
-
+def _validate_output(arr):
+    
+    if isinstance(arr, np.ndarray):
+        if arr.shape==():
+            element = arr.item()            
+            return element   
+        elif len(arr.shape)==1 and arr.shape[0]==1:
+            return arr[0]
+            
+        elif len(arr.shape)==2 and arr.shape[0]*arr.shape[1]==1: 
+            return arr[0,0]
+        else:        
+            return arr
+    return arr    # this is the case of float 
 
 
 class ConditionalUniformReveredGaussian(ConditionalBasePrior):
@@ -476,7 +488,7 @@ class MarginalizedTruncatedHollowedGaussian(ConditionalBasePrior):
         self.__class__.__name__ = 'MarginalizedTruncatedHollowedGaussian'
         self.__class__.__qualname__ = 'MarginalizedTruncatedHollowedGaussian'
         self._reference_params = reference_params
-        x = np.linspace(self._reference_params['minimum_t'], self._reference_params['maximum_t'], 10000)
+        x = np.linspace(self._reference_params['minimum_t'], self._reference_params['maximum_t'], 1000)
         
         
         self.x=x   
@@ -518,7 +530,7 @@ class MarginalizedTruncatedHollowedGaussian(ConditionalBasePrior):
             #define inverse_cdf
             
             
-            if np.isnan(self.xx ) or self.xx.shape[1] != len(self.f[0]): # do this tsep only if we have to 
+            if np.sum(np.isnan(self.xx )) > 0 or self.xx.shape[1] != len(self.f[0]): # do this tsep only if we have to 
                 self.xx = np.zeros((len(self.x),len(self.f[0])))
                 for i in range(len(self.f[0])):
                     self.xx[:,i] = self.x 
@@ -528,15 +540,21 @@ class MarginalizedTruncatedHollowedGaussian(ConditionalBasePrior):
 
             for i in range(len(self.f[0])):
                 samples[i]=interp1d(cdf[:,i], self.x)(val[i])
-
-            return samples
+            #print('t sample : ') 
+            #print(_validate_output(samples))
+            return _validate_output(samples)
         except:
 
             #define inverse_cdf            
             cdf = self.cdf(self.x)
             sample=interp1d(cdf, self.x)(val)
+            
+            
+           # print('except t sample : ') 
+           # print(_validate_output(sample))
+            
 
-            return sample
+            return _validate_output(sample)
         
         #return erfinv(2 * val * self.normalisation + erf(
         #    (self.minimum - self.mu) / 2 ** 0.5 / self.sigma)) * 2 ** 0.5 * self.sigma + self.mu
@@ -575,7 +593,8 @@ class MarginalizedTruncatedHollowedGaussian(ConditionalBasePrior):
        
         
         if self.n==0: # meaning we are teh first t
-           return 1/(self.maximum_t-self.minimum_t) # return uniform 
+           _validate_output(np.ones(self.f[0].shape)/(self.maximum_t-self.minimum_t))
+           return _validate_output(np.ones(self.f[0].shape)/(self.maximum_t-self.minimum_t)) # return uniform 
         
         normalisation = np.zeros(self.f.shape)
         # add in the start of t
@@ -607,14 +626,14 @@ class MarginalizedTruncatedHollowedGaussian(ConditionalBasePrior):
                              / normalisation[i]
                 
         probs = probs * self.is_in_prior_range(val) / self.n        
-        print('dt prob ')
-        print(probs)
+        
         if self.add_uniform:
-            self.gamma/(self.maximum_t-self.minimum_t) + (1-self.gamma)*probs 
+            probs = self.gamma/(self.maximum_t-self.minimum_t) + (1-self.gamma)*probs 
             
+        #print('dt prob ')
+        #print(_validate_output(probs))
         
-        
-        return  probs
+        return  _validate_output(probs)
 
     def cdf(self, val, **required_variables):
         self.update_conditions(**required_variables)
@@ -712,7 +731,7 @@ class ConditionalTruncatedHollowedGaussian(ConditionalBasePrior):
         self.__class__.__name__ = 'ConditionalTruncatedHollowedGaussian'
         self.__class__.__qualname__ = 'ConditionalTruncatedHollowedGaussian'
         self._reference_params = reference_params
-        x = np.linspace(self._reference_params['minimum_f'], self._reference_params['maximum_f'], 10000)
+        x = np.linspace(self._reference_params['minimum_f'], self._reference_params['maximum_f'], 1000)
         self.x=x
         self.xx=np.nan
         
@@ -728,7 +747,20 @@ class ConditionalTruncatedHollowedGaussian(ConditionalBasePrior):
         # the first prior is uniform and on top of that we include, this yet not a 2D distribution  
         self.n = len(self.f)
         if self.n==0:
-            return 1/(self.maximum_f-self.minimum_f)
+            prob = 0
+            #print('prob f, n==0')
+            if isinstance(val, (float,np.floating)):
+                prob =1 / (self.maximum_f-self.minimum_f)
+                #print('prob float')
+                #print(prob)
+            else:
+                prob = np.ones(val.shape)/(self.maximum_f-self.minimum_f)
+            
+            prob = _validate_output(prob)
+            #print(val)
+            #print(prob)
+            
+            return prob
         
         else:
             
@@ -757,9 +789,13 @@ class ConditionalTruncatedHollowedGaussian(ConditionalBasePrior):
         
         
         if self.add_uniform:
-            self.gamma/(self.maximum_f-self.minimum_f) + (1-self.gamma)*probs_2d
+           probs_2d = self.gamma/(self.maximum_f-self.minimum_f) + (1-self.gamma)*probs_2d
         
-        return probs_2d
+        
+        #print('prob f')
+        #print(_validate_output(probs_2d))
+        
+        return _validate_output(probs_2d)
 
  
     def rescale(self, val, **required_variables):
@@ -776,7 +812,7 @@ class ConditionalTruncatedHollowedGaussian(ConditionalBasePrior):
             
             
             
-            if np.isnan(self.xx ) or self.xx.shape[1] != len(self.t[0]): # do this tsep only if we have to 
+            if np.sum(np.isnan(self.xx )) > 0 or self.xx.shape[1] != len(self.t[0]): # do this tsep only if we have to 
                 self.xx = np.zeros((len(self.x),len(self.t[0])))
                 for i in range(len(self.t[0])):
                     self.xx[:,i] = self.x 
@@ -787,15 +823,30 @@ class ConditionalTruncatedHollowedGaussian(ConditionalBasePrior):
             for i in range(len(self.t[0])):
                 samples[i]=interp1d(cdf[:,i], self.x)(val[i])
 
-            return samples
+
+            #print(' f sample')
+            #print(type(np.asarray(samples)))
+            #print(_validate_output(samples))
+                    
+            
+            return _validate_output(samples)
         except:
 
             #define inverse_cdf
-           
+            #print(self)
+            #print(val)
             cdf = self.cdf(self.x)
             sample=interp1d(cdf, self.x)(val)
+            
+            if isinstance(val,(float,np.floating)):
+                sample = np.array([sample])
+                
+            #print('except f sample')
+            #print(type(np.asarray(sample)))
+            #print(_validate_output(np.asarray(sample)))
+            
 
-            return sample
+            return _validate_output(np.asarray(sample))
 
     def cdf(self, val, **required_variables):
         self.update_conditions(**required_variables) # set self.t = t, self.prob_t = prob_t
