@@ -1,6 +1,6 @@
 import bilby
 import re
-from tbilby.core.prior import DiscreteUniform
+from ..prior import DiscreteUniform
 from bilby.core.utils import infer_parameters_from_function
 import numpy as np
 import matplotlib.pyplot as plt

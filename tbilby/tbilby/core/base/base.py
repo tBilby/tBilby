@@ -3,7 +3,7 @@ import pandas as pd
 
 from bilby.core.utils import infer_parameters_from_function
 import bilby
-from tbilby.core.prior import DiscreteUniform
+from ..prior import DiscreteUniform
 
 
 
