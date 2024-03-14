@@ -8,7 +8,7 @@ Its goal is to extend its capabilities and further develop trans-dimensional Bay
 
 **Installation**
  
-Currently, the installation of tbilby is only available from source.
+Since this is work in progress, currently, the installation of tbilby is only available from source.
 
 Clone the repository, install the requirements, and then install the software:
 
