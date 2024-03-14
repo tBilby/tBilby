@@ -6,11 +6,16 @@ It offers a high degree of flexibility in constructing models and defining prior
 Its goal is to extend its capabilities and further develop trans-dimensional Bayesian inference (arXiv:XXXX.XXXXX).
 
 
-
+**Installation**
+ 
 Currently, the installation of tbilby is only available from source.
+
 Clone the repository, install the requirements, and then install the software:
 
 git clone git@git.ligo.org:lscsoft/tbilby.git
-cd bilby/
+
+cd tbilby/
+
 pip install -r requirements.txt
+
 pip install .
