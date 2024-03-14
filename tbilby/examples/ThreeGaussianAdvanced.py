@@ -243,15 +243,15 @@ if plot_result:
     # utilizing tbilby tools for plotting and error estimation 
     
     # as the name indicates 
-    tbilby.corner_plot_discrete_params(result,filename='n_dist.png')
+    tbilby.core.base.plotting.corner_plot_discrete_params(result,filename='n_dist.png')
     
-    tbilby.corner_plot_single_component_function(result, lorentzian, order=1, not_tparams= ['sigma_l','A'], filename='lorentzian_1.png')
-    tbilby.corner_plot_single_transdimentional_component_functions(result,lorentzian,filename='mu_l_all_orders')    
+    tbilby.core.base.plotting.corner_plot_single_component_function(result, lorentzian, order=1, not_tparams= ['sigma_l','A'], filename='lorentzian_1.png')
+    tbilby.core.base.plotting.corner_plot_single_transdimentional_component_functions(result,lorentzian,filename='mu_l_all_orders')    
     
     # this will do the processing of the results for you, remove ghost parameters and return the function which is most likely from the data based on samplign frequency, which should be the same as BF    
     result_processed,cols = tbilby.core.base.preprocess_results(result,componant_functions_dict,remove_ghost_samples=False,return_samples_of_most_freq_component_function=True)
-    tbilby.corner_plot_single_transdimenstional_param(result_processed,'mu',filename='mu_g.png')
-    tbilby.corner_plot_single_transdimenstional_param(result_processed,'mu_l',filename='mu_l.png')
+    tbilby.core.base.plotting.corner_plot_single_transdimenstional_param(result_processed,'mu',filename='mu_g.png')
+    tbilby.core.base.plotting.corner_plot_single_transdimenstional_param(result_processed,'mu_l',filename='mu_l.png')
     
     # find the best maximum likelihood fit for you 
     best_params_post = tbilby.core.base.extract_maximal_likelihood_param_values(result_processed, model)
