@@ -12,7 +12,7 @@ Since this is work in progress, currently, the installation of tbilby is only av
 
 Clone the repository, install the requirements, and then install the software:
 
-git clone git@git.ligo.org:lscsoft/tbilby.git
+git clone git@github.com:NirGutt/tbilby.git
 
 cd tbilby/
 
