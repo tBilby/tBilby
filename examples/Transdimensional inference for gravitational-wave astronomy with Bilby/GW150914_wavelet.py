@@ -35,7 +35,7 @@ class TransdimensionalConditionalLogUniform(tbilby.core.prior.TransdimensionalCo
    # one must define the transdimensional_condition_function function, so we know what to do with conditional variables...  
     # it is an abstract function, without it you cant instantiate this class 
     def transdimensional_condition_function(self,**required_variables):
-        ''' setting the mimmum according the the last peak value of the gaussian.
+        ''' setting the minimum according the the last peak value of the gaussian.
         Here you refer to the parameters you are 
         working with '''
         # mu is returned as an array 
@@ -99,9 +99,9 @@ def sine_gaussian(frequency_array, amplitude, f0, Q, phi0, dt, e):
 def signal_model(frequency_array, n, amplitude0, amplitude1 , amplitude2, amplitude3, f0, f1, f2, f3, Q, Q1, Q2, Q3,
                  phi0, phi1, phi2, phi3, dt1, dt2, dt3, e, **kwargs):
     ndim = n
-    model={}
-    model["plus"]=np.zeros(frequency_array.shape, dtype='complex128')
-    model["cross"]=np.zeros(frequency_array.shape, dtype='complex128')
+    model = {}
+    model["plus"] = np.zeros(frequency_array.shape, dtype='complex128')
+    model["cross"] = np.zeros(frequency_array.shape, dtype='complex128')
     amplitude = [amplitude0, amplitude1, amplitude2, amplitude3]
     f0 = [f0, f1, f2, f3]
     Q = [Q, Q1, Q2, Q3]
