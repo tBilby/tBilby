@@ -12,7 +12,7 @@ The installation of tBilby is currently only available from source.
 
 Clone the repository, install the requirements, and then install the software:
 
-git clone git@github.com:NirGutt/tbilby.git
+git clone git@github.com:tbilby/tbilby.git
 
 cd tbilby/
 
