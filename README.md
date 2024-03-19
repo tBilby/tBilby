@@ -1,4 +1,4 @@
-# tbilby
+# tBilby
 
 The tBilby package is a trans-dimensional Bayesian inference tool based on the user-friendly Bilby inference package. 
 tBilby provides a set of tools and examples to facilitate trans-dimensional Bayesian inference. 
