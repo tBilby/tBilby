@@ -1,6 +1,6 @@
-# tbilby-sw
+# tBilby
 
-**This is the Tbilby examples/tutorial page.** Below are some of the results that can be obtained using the available Python scripts.
+**This is the tBilby examples/tutorial page.** Below are some of the results that can be obtained using the available Python scripts.
 
 ------------------------------
 
