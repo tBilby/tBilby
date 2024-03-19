@@ -97,7 +97,7 @@ if not skip:
            
         )
 
-result = bilby.result.read_in_result(filename='Three_gauss_experiment_result.json')
+result = bilby.result.read_in_result(filename='Three_gauss_example_result.json')
 
 
     
