@@ -1,23 +1,12 @@
-#! /home/hui.tong/.conda/envs/hyper_bilby/bin/env python
-from context import tbilby
+import tbilby
 import bilby
 import numpy as np
-from bilby.core.result import read_in_result
-import matplotlib.pyplot as plt
 from tbilby.core.prior.HG import MarginalizedTruncatedHollowedGaussian, ConditionalTruncatedHollowedGaussian
 from tbilby.core.prior.HG import condition_func_t1, condition_func_t2, condition_func_t3, condition_func_t4
 from tbilby.core.prior.HG import condition_func_f1, condition_func_f2, condition_func_f3, condition_func_f4
 from tbilby.core.prior.HG import ConditionalPriorDict, get_A1, get_A2, get_A3
 from bilby.core.prior import ConditionalLogUniform, LogUniform
 from gwpy.timeseries import TimeSeries
-import gwpy
-import lal
-
-import nds2
-
-import LDAStools.frameCPP
-
-import gwpy.timeseries
 
 # First set up logging and some output directories and labels
 logger = bilby.core.utils.logger
