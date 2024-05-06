@@ -364,6 +364,10 @@ def extract_maximal_likelihood_param_values(result,median=False,mean=False,model
     ----------
     result : TYPE
         The result object received froim the run_smapler function.
+    median: bool
+        returns the median sample 
+    mean: bool
+        returns the mean sample         
     model : TYPE
         The model function used 
 
@@ -372,6 +376,14 @@ def extract_maximal_likelihood_param_values(result,median=False,mean=False,model
     Dict[model parameters] = values which hold the highest log_likelihood value 
 
     '''
+    
+    # check input 
+    if not isinstance(median, bool):
+        Exception('extract_maximal_likelihood_param_values: median should be a boolean')
+    if not isinstance(mean, bool):
+        Exception('extract_maximal_likelihood_param_values: mean should be a boolean')    
+    
+    
     
     result=_fix_posterior_if_needed(result)
     

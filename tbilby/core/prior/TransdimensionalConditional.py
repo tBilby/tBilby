@@ -3,7 +3,7 @@ from abc import ABC, abstractmethod
 from .TransInterped import TransInterped
 from .DiscreteUniform import DiscreteUniform
 from .TransdimensionalConditionalProximity import ConditionalUniformReveredGaussian,ConditionalTruncatedHollowedGaussian,MarginalizedTruncatedHollowedGaussian
-
+import pandas as pd
 import bilby
 import os
 import numpy as np
@@ -227,19 +227,39 @@ def transdimensional_conditional_prior_factory(conditional_prior_class):
             self.conditional_transdimensional_params=conditional_transdimensional_params
             self.conditional_params=conditional_params
         
-        def _get_size(self,t_parameter,**required_variables):   
-            first_param = t_parameter+'0'
+        
+        
+        def _get_size(self,printit=False,**required_variables):
+            sz=0
+            for key in required_variables.keys():
+                if printit:
+                    print(key)
+                    print(required_variables[key])
+                sz_tmp = self._get_size_param(key,**required_variables)
+                if printit:    
+                    print(sz_tmp)
+                if sz_tmp > sz:
+                    sz=sz_tmp
+            return sz        
+        
+        def _get_size_param(self,t_parameter,**required_variables):   
+            #first_param = t_parameter+'0'
+            first_param = t_parameter
+            
+            
+            
             var  = required_variables[first_param]
             # let's explore it
             sample_size = 0 
-            if isinstance(var, (float, np.float64)):   
+            if isinstance(var, (float, np.float64)):                  
                 sample_size = 1 
             
             
-            if isinstance(var, np.ndarray):
+            if isinstance(var, (pd.core.series.Series, np.ndarray)):
                 if var.shape ==():
+                    
                     sample_size =1                
-                else:
+                else:                    
                     sample_size = len(required_variables[first_param])
             
             return sample_size
@@ -256,36 +276,86 @@ def transdimensional_conditional_prior_factory(conditional_prior_class):
             sample_size = -1 # give it non-possible value  
             conditional_transdimensional_params_dict,conditional_transdimensional_params_list = _process_input(self.conditional_transdimensional_params)
             
-            if self.componant_function_number>0: # meaning we have some data in the nested paramters             
-                for t_parameter in self.nested_conditional_transdimensional_params:
-                    sample_size = self._get_size(t_parameter,**required_variables)
-                    break 
-            # try to get the sample size some other way 
-            if sample_size< 0 and len(conditional_transdimensional_params_dict) > 0:     
-                for t_parameter in conditional_transdimensional_params_dict.keys():
-                    sample_size = self._get_size(t_parameter,**required_variables)
-                    break 
+            # the old way to hell...
+            # if self.componant_function_number>0: # meaning we have some data in the nested paramters             
+            #     for t_parameter in self.nested_conditional_transdimensional_params:
+            #         sample_size = self._get_size(t_parameter,**required_variables)
+            #         break 
+            # # try to get the sample size some other way 
+            # if sample_size< 0 and len(conditional_transdimensional_params_dict) > 0:     
+            #     for t_parameter in conditional_transdimensional_params_dict.keys():
+            #         sample_size = self._get_size(t_parameter,**required_variables)
+            #         break 
                         
-            if sample_size< 0 and len(conditional_transdimensional_params_list) > 0:     
-                for t_parameter in conditional_transdimensional_params_list:
-                    sample_size = self._get_size(t_parameter,**required_variables)
-                    break 
+            # if sample_size< 0 and len(conditional_transdimensional_params_list) > 0:     
+            #     for t_parameter in conditional_transdimensional_params_list:
+            #         sample_size = self._get_size(t_parameter,**required_variables)
+            #         break 
                 
-                
-                
+            # get size form the needed data     
+            sample_size = self._get_size(**required_variables)    
                 
             if sample_size < -1 and (len(conditional_transdimensional_params_list) + len(conditional_transdimensional_params_dict)+ self.componant_function_number) > 0  :
                 print('An issue with the transdimensional data ! couldnt retrieve  the sample size ')
                 return 
                 
-            #fix  nested params 
+             #fix  nested params 
             if sample_size > 0: 
                 fix_vars = self.nested_conditional_transdimensional_params +\
                     list(conditional_transdimensional_params_dict.keys())  +\
                     conditional_transdimensional_params_list    
                 for t_parameter in fix_vars:                
                     param =  (getattr(self,t_parameter))  
-                    setattr(self,t_parameter,param.reshape(-1,sample_size))  
+                    # we have an issue with fixed (i.e. delta function prior) 
+                    #conditional params, since there are just floats and not array  
+                    ## case A
+                    if t_parameter in self.nested_conditional_transdimensional_params:
+                        
+                        if np.size(param)!= self.componant_function_number*sample_size: # check that we got the expected number of params 
+                            # we didnt.. so this must be a const prior, checking..   
+                            if np.size(param)!= self.componant_function_number:
+                                print(required_variables)
+                                self._get_size(True, **required_variables)   
+                                raise ValueError('(nested_conditional_transdimensional_params) estimated no of samples ' + str(sample_size)+  '. The number of samples recieved for ' + t_parameter +' is '+ str(np.size(param))+' doesnt make sense, we need ' + str(self.componant_function_number)+' can not take this! ' )
+                            else:
+                                # turn this into somthing we can handle 
+                                prepare_param = np.ones((self.componant_function_number,sample_size))
+                                for j in np.arange(np.size(param)):
+                                    prepare_param[j,:]*=param[j] # set the constant values 
+                                param = prepare_param
+                    ## case B 
+                    if t_parameter in conditional_transdimensional_params_dict.keys(): 
+                        
+                        
+                       
+                        if np.size(param)!= conditional_transdimensional_params_dict[t_parameter] * sample_size: # check that we got the expected number of params 
+                            # we didnt.. so this must be a const prior, checking..   
+                            if np.size(param)!= conditional_transdimensional_params_dict[t_parameter]:                                
+                                raise ValueError('(conditional_transdimensional_params_dict) The number of samples recieved for ' + t_parameter +' is '+ str(np.size(param))+' doesnt make sense, we need ' + str(conditional_transdimensional_params_dict[t_parameter])+' can not take this! ' )
+                            else:
+                                # turn this into somthing we can handle 
+                                prepare_param = np.ones((conditional_transdimensional_params_dict[t_parameter],sample_size))
+                                for j in np.arange(np.size(param)):
+                                    prepare_param[j,:]*=param[j] # set the constant values 
+                                param = prepare_param
+                        
+                    #case C 
+                    if t_parameter in conditional_transdimensional_params_list: 
+                        if np.size(param)!= (self.componant_function_number+1)*sample_size: # check that we got the expected number of params 
+                            # we didnt.. so this must be a const prior, checking..  
+                            if np.size(param)!= self.componant_function_number+1:
+                                raise ValueError('(conditional_transdimensional_params_list) The number of samples recieved for ' + t_parameter +' is '+ str(np.size(param))+' doesnt make sense, we need ' + str(self.componant_function_number+1)+' can not take this! ' )
+                            else:
+                                # turn this into somthing we can handle 
+                                prepare_param = np.ones((self.componant_function_number+1,sample_size))
+                                for j in np.arange(np.size(param)):
+                                    prepare_param[j,:]*=param[j] # set the constant values 
+                                param = prepare_param
+                                
+                    
+
+                    # FINDISH HIM!!                                   
+                    setattr(self,t_parameter,param.reshape(-1,sample_size))   
                      
                     
             # done !!!!!!!    
@@ -391,3 +461,5 @@ class ConditionalDiscreteUniform(bilby.prior.conditional.conditional_prior_facto
 class TransdimensionalConditionalDiscreteUniform(transdimensional_conditional_prior_factory(ConditionalDiscreteUniform)):
     pass
 
+class TransdimensionalConditionalGaussian(transdimensional_conditional_prior_factory(bilby.core.prior.ConditionalGaussian)):
+    pass
