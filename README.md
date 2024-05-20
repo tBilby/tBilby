@@ -14,7 +14,7 @@ Clone the repository, install the requirements, and then install the software:
 
 git clone https://github.com/tBilby/tBilby.git
 
-cd tbilby/
+cd tBilby/
 
 pip install -r requirements.txt
 
