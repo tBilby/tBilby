@@ -66,16 +66,8 @@ class AscendingOrderStatPrior(bilby.prior.Prior):
                 if isinstance(self._prev_val, np.ndarray):
                     prev_val= self._prev_val[p_index]
                 else:
-                    prev_val= self._prev_val
-
-                xs = np.linspace(prev_val/(self.maximum - self.minimum),1,1000)
-                xs_scaled = xs * (self.maximum - self.minimum) + self.minimum
-
-                cdf = self.nomalized_conditional_cdf(xs, prev_val/(self.maximum - self.minimum), 
-                                    self._tot_order_num, 
-                                    self._this_order_num-1, 
-                                    self._this_order_num)
-                res.append(np.interp(v,cdf,xs_scaled))
+                    prev_val= self._prev_val    
+                res.append(self.normalized_conditional_icdf(v, (prev_val- self.minimum)/(self.maximum - self.minimum), self._tot_order_num, self._this_order_num)*(self.maximum - self.minimum)+self.minimum)
         
         return np.array(res)
 
@@ -94,8 +86,8 @@ class AscendingOrderStatPrior(bilby.prior.Prior):
         """
         # val /= (self.maximum-self.minimum)
         
-        return self.normalized_pdf_order_statistics(self._prev_val/(self.maximum-self.minimum), 
-                                            val/(self.maximum-self.minimum),
+        return self.normalized_pdf_order_statistics((self._prev_val-self.minimum)/(self.maximum-self.minimum), 
+                                            (val-self.minimum)/(self.maximum-self.minimum),
                                             self._this_order_num-1, 
                                             self._this_order_num, 
                                             self._tot_order_num)/(self.maximum-self.minimum)
@@ -140,12 +132,26 @@ class AscendingOrderStatPrior(bilby.prior.Prior):
         value = ((1-u)**(-i+n)* u**(-1+i)*self.beta_inc((u-x)/(-1+u), -i+j, 1-j+n)*np.math.factorial(n))/\
         (np.math.factorial(i-1)*np.math.factorial(-i+j-1)*np.math.factorial(1-j+n-1))
         return value/self.beta_dist(u, i, n+1-i)
+
+    def normalized_conditional_icdf(self, y, u, n, this_order_num):
+
+        i = this_order_num - 1
+        j = i+1
+        if this_order_num==1:
+            # the first one is the largest
+            # this is just the beta distribution
+            return scipy.special.betaincinv(j,n+1-j,y)
+        
+        # cdf of \pi(u|v) with v>u
+        value = y * self.beta_dist(u, i, n+1-i)*np.math.factorial(i-1)*np.math.factorial(n-i)/((1-u)**(-i+n)*u**(-1+i)*np.math.factorial(n))
+
+        return u - scipy.special.betaincinv(-i+j, 1-j+n, value) * (-1+u)
     
-class ConditionalOrderStatPrior(bilby.prior.conditional.conditional_prior_factory(OrderStatPrior)):
+class ConditionalAscendingOrderStatPrior(bilby.prior.conditional.conditional_prior_factory(AscendingOrderStatPrior)):
     pass    
 
 
-class TransdimensionalConditionalOrderStatPrior(tbilby.core.prior.transdimensional_conditional_prior_factory(ConditionalOrderStatPrior)):
+class TransdimensionalConditionalAscendingOrderStatPrior(tbilby.core.prior.transdimensional_conditional_prior_factory(ConditionalAscendingOrderStatPrior)):
     pass
 
 class DescendingOrderStatPrior(bilby.prior.Prior):
@@ -303,4 +309,3 @@ class ConditionalDescendingOrderStatPrior(bilby.prior.conditional.conditional_pr
 
 class TransdimensionalConditionalDescendingOrderStatPrior(tbilby.core.prior.transdimensional_conditional_prior_factory(ConditionalDescendingOrderStatPrior)):
     pass
-
