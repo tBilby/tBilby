@@ -6,10 +6,12 @@ import tbilby
 from scipy.stats import norm,beta
 import matplotlib.pyplot as plt
 import scipy.stats as stats
+import pandas as pd
+# np.math.factorial = np.vectorize(np.math.factorial)
 
 class AscendingOrderStatPrior(bilby.prior.Prior):
 
-    def __init__(self, prev_val,this_order_num,tot_order_num,minimum, maximum, name=None, latex_label=None,
+    def __init__(self, prev_val,this_order_num,minimum, maximum, name=None, latex_label=None,
                  unit=None, boundary=None):
         """Uniform prior with bounds
 
@@ -34,7 +36,7 @@ class AscendingOrderStatPrior(bilby.prior.Prior):
         self._prev_val=prev_val
         
         self._this_order_num=this_order_num
-        self._tot_order_num=tot_order_num
+        # self._tot_order_num=tot_order_num
 
         super(AscendingOrderStatPrior, self).__init__(name=name, latex_label=latex_label,
                                       minimum=minimum, maximum=maximum, unit=unit,
@@ -57,18 +59,29 @@ class AscendingOrderStatPrior(bilby.prior.Prior):
         """
         
         res=[]
-        
+        size=False
         if not isinstance(val, np.ndarray):
-            val_est=[val]
+            size=True
+            val_est=np.array([val])
+            self._tot_order_num=np.array([self._tot_order_num])
+        elif not isinstance(self._tot_order_num, np.ndarray):
+            self._tot_order_num=np.array([self._tot_order_num])
+            val_est=val.copy() 
         else:
-            val_est=val.copy()    
-        for v,p_index in zip(val_est,np.arange(len(val_est))):
+            val_est=val.copy()
+        for i, v in enumerate(val_est):
+            if self._this_order_num <= self._tot_order_num[i]:
+                # draw samples from ordering stat prior
                 if isinstance(self._prev_val, np.ndarray):
-                    prev_val= self._prev_val[p_index]
+                    prev_val= self._prev_val[i]
                 else:
                     prev_val= self._prev_val    
-                res.append(self.normalized_conditional_icdf(v, (prev_val- self.minimum)/(self.maximum - self.minimum), self._tot_order_num, self._this_order_num)*(self.maximum - self.minimum)+self.minimum)
-        
+                res.append(self.normalized_conditional_icdf(v, (prev_val- self.minimum)/(self.maximum - self.minimum), self._tot_order_num[i], self._this_order_num)*(self.maximum - self.minimum)+self.minimum)
+            else:
+                # ghost parameters, draw from unifrom[minimum, maximum]
+                res.append(v*(self.maximum-self.minimum)+self.minimum)
+        if size:
+            return np.array(res)[0]
         return np.array(res)
 
     def prob(self, val):
@@ -85,37 +98,64 @@ class AscendingOrderStatPrior(bilby.prior.Prior):
         
         """
         # val /= (self.maximum-self.minimum)
-        
-        return self.normalized_pdf_order_statistics((self._prev_val-self.minimum)/(self.maximum-self.minimum), 
-                                            (val-self.minimum)/(self.maximum-self.minimum),
-                                            self._this_order_num-1, 
-                                            self._this_order_num, 
-                                            self._tot_order_num)/(self.maximum-self.minimum)
+        if (not isinstance(val, np.ndarray)) and (not isinstance(val, pd.Series)):
+            if self._this_order_num <= self._tot_order_num:
+                # ordering stats prior
+                return self.normalized_pdf_order_statistics((self._prev_val-self.minimum)/(self.maximum-self.minimum), 
+                                                    (val-self.minimum)/(self.maximum-self.minimum),
+                                                    self._this_order_num-1, 
+                                                    self._this_order_num, 
+                                                    self._tot_order_num)/(self.maximum-self.minimum)
+            else:
+                return ((val >= self.minimum) & (val <= self.maximum)) / (self.maximum - self.minimum)
+        elif (not isinstance(self._tot_order_num, np.ndarray)) and (not isinstance(self._tot_order_num, pd.Series)):
+            self._tot_order_num=np.array([self._tot_order_num])
+        if (not isinstance(self._prev_val, np.ndarray)) and (not isinstance(self._prev_val, pd.Series)):
+            self._prev_val=np.array([self._prev_val])
+        mask = self._this_order_num <= self._tot_order_num
+        prob=np.ones(self._tot_order_num.shape)
+        if sum(mask) > 0:
+            prob[mask] *= self.normalized_pdf_order_statistics((self._prev_val[mask]-self.minimum)/(self.maximum-self.minimum), 
+                                        (val[mask]-self.minimum)/(self.maximum-self.minimum),
+                                        self._this_order_num-1, 
+                                        self._this_order_num, 
+                                        self._tot_order_num[mask])/(self.maximum-self.minimum)
+        if sum(~mask)>0:
+            prob[~mask] *= ((val[~mask] >= self.minimum) & (val[~mask] <= self.maximum)) / (self.maximum - self.minimum)
+        return prob
     
     def ln_prob(self, val):
         return np.log(self.prob(val))
     
-    def normalized_pdf_order_statistics(self,u, v, i, j, n): # should work on normalize u and v 
-    
-        if self._this_order_num==1:
-            return self.beta_dist(v, j, n+1-j)
-    
-        n_factorial = np.math.factorial(n)
-        i_minus_1_factorial = np.math.factorial(i - 1)
-        j_minus_i_minus_1_factorial = np.math.factorial(j - i - 1)
-        n_minus_j_factorial = np.math.factorial(n - j)
-        
+    def normalized_pdf_order_statistics(self, u, v, this_order_num, n): # should work on normalize u and v 
+        i = n-this_order_num+1
+        j = i+1
+        if this_order_num==1:
+            return self.beta_dist(u, i, n+1-i)
+        try:
+            n_factorial = np.math.factorial(n)
+            i_minus_1_factorial = np.math.factorial(i - 1)
+            j_minus_i_minus_1_factorial = np.math.factorial(j - i - 1)
+            n_minus_j_factorial = np.math.factorial(n - j)
+        except TypeError:
+            n_factorial = np.vectorize(np.math.factorial)(n)
+            i_minus_1_factorial = np.vectorize(np.math.factorial)(i - 1)
+            j_minus_i_minus_1_factorial = np.vectorize(np.math.factorial)(j - i - 1)
+            n_minus_j_factorial = np.vectorize(np.math.factorial)(n - j)
         up = (n_factorial * (u ** (i - 1)) * ((v - u) ** (j - i - 1)) * ((1 - v) ** (n - j)))
         down = (i_minus_1_factorial * j_minus_i_minus_1_factorial * n_minus_j_factorial)
         pdf_value = up  / down 
         if isinstance(v, np.ndarray): # get ride of not order things
             pdf_value[u>=v]=0
         
-        return pdf_value/self.beta_dist(u, i, n+1-i)
+        return pdf_value/self.beta_dist(v, j, n+1-j)
 
     def beta_dist(self,x, alpha, beta):
         # when alpha and beta are integers
-        value = x**(alpha-1)*(1-x)**(beta-1)*np.math.factorial(alpha+beta-1)/np.math.factorial(alpha-1)/np.math.factorial(beta-1)
+        try:
+            value = x**(alpha-1)*(1-x)**(beta-1)*np.math.factorial(alpha+beta-1)/np.math.factorial(alpha-1)/np.math.factorial(beta-1)
+        except TypeError:
+            value = x**(alpha-1)*(1-x)**(beta-1)*np.vectorize(np.math.factorial)(alpha+beta-1)/np.math.factorial(alpha-1)/np.vectorize(np.math.factorial)(beta-1)
         return value
     def beta_inc(self,x, a, b):
         #incomplete beta function when a and b are int
@@ -156,7 +196,7 @@ class TransdimensionalConditionalAscendingOrderStatPrior(tbilby.core.prior.trans
 
 class DescendingOrderStatPrior(bilby.prior.Prior):
 
-    def __init__(self, prev_val,this_order_num,tot_order_num,minimum, maximum, name=None, latex_label=None,
+    def __init__(self, prev_val,this_order_num,minimum, maximum, name=None, latex_label=None,
                  unit=None, boundary=None):
         """Uniform prior with bounds
 
@@ -181,7 +221,7 @@ class DescendingOrderStatPrior(bilby.prior.Prior):
         self._prev_val=prev_val
         
         self._this_order_num=this_order_num
-        self._tot_order_num=tot_order_num
+        # self._tot_order_num=tot_order_num
 
         super(DescendingOrderStatPrior, self).__init__(name=name, latex_label=latex_label,
                                       minimum=minimum, maximum=maximum, unit=unit,
@@ -204,26 +244,29 @@ class DescendingOrderStatPrior(bilby.prior.Prior):
         """
         
         res=[]
-        
+        size=False
         if not isinstance(val, np.ndarray):
-            val_est=[val]
+            val_est=np.array([val])
+            size=True #sample()
+            self._tot_order_num=np.array([self._tot_order_num])
+        elif not isinstance(self._tot_order_num, np.ndarray):
+            self._tot_order_num=np.array([self._tot_order_num])
+            val_est=val.copy()
         else:
             val_est=val.copy()    
-        for u,p_index in zip(val_est,np.arange(len(val_est))):
+        for i, u in enumerate(val_est):
+            if self._this_order_num <= self._tot_order_num[i]:
+                # draw samples from ordering stat prior
                 if isinstance(self._prev_val, np.ndarray):
-                    prev_val= self._prev_val[p_index]
+                    prev_val= self._prev_val[i]
                 else:
                     prev_val= self._prev_val
-
-                # xs = np.linspace(0,(prev_val- self.minimum)/(self.maximum - self.minimum),1000)
-                # xs_scaled = xs * (self.maximum - self.minimum) + self.minimum
-
-                # cdf = self.nomalized_conditional_cdf(xs, (prev_val- self.minimum)/(self.maximum - self.minimum), 
-                #                     self._tot_order_num, 
-                #                     self._this_order_num)
-                # res.append(np.interp(v,cdf,xs_scaled))
-                res.append(self.normalized_conditional_icdf(u,(prev_val- self.minimum)/(self.maximum - self.minimum), self._tot_order_num, self._this_order_num)*(self.maximum - self.minimum)+self.minimum)
-        
+                res.append(self.normalized_conditional_icdf(u,(prev_val- self.minimum)/(self.maximum - self.minimum), self._tot_order_num[i], self._this_order_num)*(self.maximum - self.minimum)+self.minimum)
+            else:
+                # ghost parameters, draw from unifrom[minimum, maximum]
+                res.append(u*(self.maximum-self.minimum)+self.minimum)
+        if size:
+            return np.array(res)[0]
         return np.array(res)
 
     def prob(self, val):
@@ -239,12 +282,30 @@ class DescendingOrderStatPrior(bilby.prior.Prior):
         
         
         """
-        
-        return self.normalized_pdf_order_statistics((val-self.minimum)/(self.maximum-self.minimum),
-                                            (self._prev_val-self.minimum)/(self.maximum-self.minimum), 
-                                            self._this_order_num, 
-                                            self._tot_order_num)/(self.maximum-self.minimum)
-    
+        if (not isinstance(val, np.ndarray)) and (not isinstance(val, pd.Series)):
+            if self._this_order_num <= self._tot_order_num:
+                # ordering stats prior
+                return self.normalized_pdf_order_statistics((val-self.minimum)/(self.maximum-self.minimum),
+                                                    (self._prev_val-self.minimum)/(self.maximum-self.minimum), 
+                                                    self._this_order_num, 
+                                                    self._tot_order_num)/(self.maximum-self.minimum)
+            else:
+                return ((val >= self.minimum) & (val <= self.maximum)) / (self.maximum - self.minimum)
+        elif (not isinstance(self._tot_order_num, np.ndarray)) and (not isinstance(self._tot_order_num, pd.Series)):
+            self._tot_order_num=np.array([self._tot_order_num])
+        if (not isinstance(self._prev_val, np.ndarray)) and (not isinstance(self._prev_val, pd.Series)):
+            self._prev_val=np.array([self._prev_val])
+        mask = self._this_order_num <= self._tot_order_num
+        prob=np.ones(self._tot_order_num.shape)
+        if sum(mask) > 0:
+            prob[mask] *= self.normalized_pdf_order_statistics((val[mask]-self.minimum)/(self.maximum-self.minimum),
+                                                    (self._prev_val[mask]-self.minimum)/(self.maximum-self.minimum), 
+                                                    self._this_order_num, 
+                                                    self._tot_order_num[mask])/(self.maximum-self.minimum)
+        if sum(~mask) > 0:
+            prob[~mask] *= ((val[~mask] >= self.minimum) & (val[~mask] <= self.maximum)) / (self.maximum - self.minimum)
+        return prob
+
     def ln_prob(self, val):
         return np.log(self.prob(val))
     
@@ -253,12 +314,16 @@ class DescendingOrderStatPrior(bilby.prior.Prior):
         j = i+1
         if this_order_num==1:
             return self.beta_dist(u, i, n+1-i)
-
-        n_factorial = np.math.factorial(n)
-        i_minus_1_factorial = np.math.factorial(i - 1)
-        j_minus_i_minus_1_factorial = np.math.factorial(j - i - 1)
-        n_minus_j_factorial = np.math.factorial(n - j)
-        
+        try:
+            n_factorial = np.math.factorial(n)
+            i_minus_1_factorial = np.math.factorial(i - 1)
+            j_minus_i_minus_1_factorial = np.math.factorial(j - i - 1)
+            n_minus_j_factorial = np.math.factorial(n - j)
+        except TypeError:
+            n_factorial = np.vectorize(np.math.factorial)(n)
+            i_minus_1_factorial = np.vectorize(np.math.factorial)(i - 1)
+            j_minus_i_minus_1_factorial = np.vectorize(np.math.factorial)(j - i - 1)
+            n_minus_j_factorial = np.vectorize(np.math.factorial)(n - j)
         up = (n_factorial * (u ** (i - 1)) * ((v - u) ** (j - i - 1)) * ((1 - v) ** (n - j)))
         down = (i_minus_1_factorial * j_minus_i_minus_1_factorial * n_minus_j_factorial)
         pdf_value = up  / down 
@@ -269,7 +334,10 @@ class DescendingOrderStatPrior(bilby.prior.Prior):
 
     def beta_dist(self,x, alpha, beta):
         # when alpha and beta are integers
-        value = x**(alpha-1)*(1-x)**(beta-1)*np.math.factorial(alpha+beta-1)/np.math.factorial(alpha-1)/np.math.factorial(beta-1)
+        try:
+            value = x**(alpha-1)*(1-x)**(beta-1)*np.math.factorial(alpha+beta-1)/np.math.factorial(alpha-1)/np.math.factorial(beta-1)
+        except TypeError:
+            value = x**(alpha-1)*(1-x)**(beta-1)*np.vectorize(np.math.factorial)(alpha+beta-1)/np.vectorize(np.math.factorial)(alpha-1)/np.vectorize(np.math.factorial)(beta-1)
         return value
     def beta_inc(self,x, a, b):
         #incomplete beta function when a and b are int
