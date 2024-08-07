@@ -103,7 +103,6 @@ class AscendingOrderStatPrior(bilby.prior.Prior):
                 # ordering stats prior
                 return self.normalized_pdf_order_statistics((self._prev_val-self.minimum)/(self.maximum-self.minimum), 
                                                     (val-self.minimum)/(self.maximum-self.minimum),
-                                                    self._this_order_num-1, 
                                                     self._this_order_num, 
                                                     self._tot_order_num)/(self.maximum-self.minimum)
             else:
@@ -117,7 +116,6 @@ class AscendingOrderStatPrior(bilby.prior.Prior):
         if sum(mask) > 0:
             prob[mask] *= self.normalized_pdf_order_statistics((self._prev_val[mask]-self.minimum)/(self.maximum-self.minimum), 
                                         (val[mask]-self.minimum)/(self.maximum-self.minimum),
-                                        self._this_order_num-1, 
                                         self._this_order_num, 
                                         self._tot_order_num[mask])/(self.maximum-self.minimum)
         if sum(~mask)>0:
@@ -128,10 +126,10 @@ class AscendingOrderStatPrior(bilby.prior.Prior):
         return np.log(self.prob(val))
     
     def normalized_pdf_order_statistics(self, u, v, this_order_num, n): # should work on normalize u and v 
-        i = n-this_order_num+1
+        i = this_order_num-1
         j = i+1
         if this_order_num==1:
-            return self.beta_dist(u, i, n+1-i)
+            return self.beta_dist(v, j, n+1-j)
         try:
             n_factorial = np.math.factorial(n)
             i_minus_1_factorial = np.math.factorial(i - 1)
@@ -148,7 +146,7 @@ class AscendingOrderStatPrior(bilby.prior.Prior):
         if isinstance(v, np.ndarray): # get ride of not order things
             pdf_value[u>=v]=0
         
-        return pdf_value/self.beta_dist(v, j, n+1-j)
+        return pdf_value/self.beta_dist(u, i, n+1-i)
 
     def beta_dist(self,x, alpha, beta):
         # when alpha and beta are integers
