@@ -1,10 +1,9 @@
 import tbilby
 import bilby
 import numpy as np
-from tbilby.core.prior.HG import MarginalizedTruncatedHollowedGaussian, ConditionalTruncatedHollowedGaussian
-from tbilby.core.prior.HG import condition_func_t1, condition_func_t2, condition_func_t3, condition_func_t4
-from tbilby.core.prior.HG import condition_func_f1, condition_func_f2, condition_func_f3, condition_func_f4
-from tbilby.core.prior.HG import ConditionalPriorDict, get_A1, get_A2, get_A3
+from scipy.interpolate import interp1d
+
+from tbilby.core.prior.order_stats import TransdimensionalConditionalDescendingOrderStatPrior
 from bilby.core.prior import ConditionalLogUniform, LogUniform
 from gwpy.timeseries import TimeSeries
 
@@ -95,21 +94,59 @@ def sine_gaussian(frequency_array, amplitude, f0, Q, phi0, dt, e):
     cross *= np.exp(-2j*frequency_array*np.pi*dt)
     return {"plus": plus, "cross": cross}
 
+# We now use gwpy to obtain analysis and psd data and create the ifo_list
+ifo_list = bilby.gw.detector.InterferometerList([])
+psd_list = []
+for det in detectors:
+    logger.info("Downloading analysis data for ifo {}".format(det))
+    ifo = bilby.gw.detector.get_empty_interferometer(det)
+    data = TimeSeries.fetch_open_data(det, start_time, end_time)
+    ifo.strain_data.set_from_gwpy_timeseries(data)
 
-def signal_model(frequency_array, n, amplitude0, amplitude1 , amplitude2, amplitude3, f0, f1, f2, f3, Q, Q1, Q2, Q3,
-                 phi0, phi1, phi2, phi3, dt1, dt2, dt3, e, **kwargs):
+    logger.info("Downloading psd data for ifo {}".format(det))
+    psd_data = TimeSeries.fetch_open_data(det, psd_start_time, psd_end_time)
+    psd_alpha = 2 * roll_off / duration
+    psd = psd_data.psd(
+        fftlength=duration, overlap=0, window=("tukey", psd_alpha), method="median"
+    )
+    
+    psd_list.append(psd)
+    ifo.power_spectral_density = bilby.gw.detector.PowerSpectralDensity(
+        frequency_array=psd.frequencies.value, psd_array=psd.value
+    )
+
+    #psd_list.append(ifo.power_spectral_density_array)
+    ifo.maximum_frequency = maximum_frequency
+    ifo.minimum_frequency = minimum_frequency
+    ifo_list.append(ifo)
+
+
+def antenna_conversion_SNR_to_amplitude(SNR, Q, f, e, ra, dec, geocent_time, psi, ifo_list=ifo_list):
+    total = 0
+    for detector in ifo_list:
+        coefficient = 0
+        coefficient += detector.antenna_response(ra, dec, geocent_time, psi, 'plus')**2
+        coefficient += e**2 * detector.antenna_response(ra,dec,geocent_time, psi, 'cross')**2
+        coefficient *= Q/(2*np.sqrt(2*np.pi)*f*detector.power_spectral_density.power_spectral_density_interpolated(f))
+        total += coefficient
+    return SNR/np.sqrt(total)
+
+def signal_model(frequency_array, n, SNR0, SNR1, SNR2, SNR3, SNR4, SNR5, SNR6, SNR7, f0, f1, f2, f3, f4, f5, f6, f7, Q0, Q1, Q2, Q3, Q4, Q5, Q6, Q7,
+                 phi0, phi1, phi2, phi3, phi4, phi5, phi6, phi7, dt1, dt2, dt3, dt4, dt5, dt6, dt7, geocent_time, psi, ra, dec, e, **kwargs):
     ndim = n
     model = {}
     model["plus"] = np.zeros(frequency_array.shape, dtype='complex128')
     model["cross"] = np.zeros(frequency_array.shape, dtype='complex128')
-    amplitude = [amplitude0, amplitude1, amplitude2, amplitude3]
-    f0 = [f0, f1, f2, f3]
-    Q = [Q, Q1, Q2, Q3]
-    phi0 = [phi0, phi1, phi2, phi3]
-    dt = [0, dt1, dt2, dt3]
+    SNR = [SNR0, SNR1, SNR2, SNR3, SNR4, SNR5, SNR6, SNR7]
+    f = [f0, f1, f2, f3, f4, f5, f6, f7]
+    Q = [Q0, Q1, Q2, Q3, Q4, Q5, Q6, Q7]
+    phi= [phi0, phi1, phi2, phi3, phi4, phi5, phi6, phi7]
+    dt = [0, dt1, dt2, dt3, dt4, dt5, dt6, dt7]
     for i in range(int(n)):
-        model["plus"] += sine_gaussian(frequency_array, amplitude[i], f0[i], Q[i], phi0[i], dt[i], e)["plus"] 
-        model["cross"] += sine_gaussian(frequency_array, amplitude[i], f0[i], Q[i], phi0[i], dt[i], e)["cross"] 
+        A = antenna_conversion_SNR_to_amplitude(SNR[i], Q[i], f[i], e, ra, dec, geocent_time+dt[i], psi)
+        sig = sine_gaussian(frequency_array, A, f[i], Q[i], phi[i], dt[i], e)
+        model["plus"] += sig["plus"] 
+        model["cross"] += sig["cross"] 
     
     return {"plus":model["plus"], "cross":model["cross"]}
 
@@ -127,60 +164,81 @@ waveform_generator = bilby.gw.waveform_generator.WaveformGenerator(
     waveform_arguments=waveform_arguments,
 )
 
-# We now use gwpy to obtain analysis and psd data and create the ifo_list
-ifo_list = bilby.gw.detector.InterferometerList([])
-for det in detectors:
-    logger.info("Downloading analysis data for ifo {}".format(det))
-    ifo = bilby.gw.detector.get_empty_interferometer(det)
-    data = TimeSeries.fetch_open_data(det, start_time, end_time)
-    ifo.strain_data.set_from_gwpy_timeseries(data)
-
-    logger.info("Downloading psd data for ifo {}".format(det))
-    psd_data = TimeSeries.fetch_open_data(det, psd_start_time, psd_end_time)
-    psd_alpha = 2 * roll_off / duration
-    psd = psd_data.psd(
-        fftlength=duration, overlap=0, window=("tukey", psd_alpha), method="median"
-    )
-    ifo.power_spectral_density = bilby.gw.detector.PowerSpectralDensity(
-        frequency_array=psd.frequencies.value, psd_array=psd.value
-    )
-    ifo.maximum_frequency = maximum_frequency
-    ifo.minimum_frequency = minimum_frequency
-    ifo_list.append(ifo)
-
-
-logger.info("Saving data plots to {}".format(outdir))
-bilby.core.utils.check_directory_exists_and_if_not_mkdir(outdir)
-ifo_list.plot_data(outdir=outdir, label=label)
-
-
 # Here we define the priors
-priors = bilby.core.prior.PriorDict(filename="n4.prior")
+class TransdimensionalConditionalDescendingOrderStatPriorSNR(TransdimensionalConditionalDescendingOrderStatPrior):
+   
+    def transdimensional_condition_function(self,**required_variables):
+        
+        #len(self.SNR.shape[1])
+        if len(self.SNR)>0:
+            self._prev_val=self.SNR[-1]
+            self._this_order_num = self.SNR.shape[0]+1
+        else:
+            self.this_order_num = 1
+            # to handle the first parameter when _pre_val is the pre set int
+            if isinstance(self.n, np.ndarray):
+                self._prev_val = self.minimum * np.ones(self.n.shape)
+        try:
+            self._tot_order_num=self.n.astype(int)
+        except:
+            self._tot_order_num=int(self.n)
+        return dict(_prev_val=self._prev_val,_this_order_num=self._this_order_num, _tot_order_num=self._tot_order_num)
 
-priors["geocent_time"] = bilby.core.prior.Uniform(
-    trigger_time - 0.5, trigger_time + 0.5, name="geocent_time"
-)
-priors =tbilby.core.base.create_transdimensional_priors(transdimensional_prior_class=TransdimensionalConditionalLogUniform,\
-                                                          param_name='amplitude',\
-                                                          nmax= 4,\
-                                                          nested_conditional_transdimensional_params=['amplitude'],\
+# prameter_prior
+priors = bilby.core.prior.dict.ConditionalPriorDict()
+priors = tbilby.core.base.create_transdimensional_priors(transdimensional_prior_class=TransdimensionalConditionalDescendingOrderStatPriorSNR,\
+                                                          param_name='SNR',\
+                                                          nmax= 8,\
+                                                          nested_conditional_transdimensional_params=['SNR'],\
                                                           conditional_transdimensional_params=[],\
-                                                          conditional_params=[],\
+                                                          conditional_params=['n'],\
                                                           prior_dict_to_add=priors,\
                                                           SaveConditionFunctionsToFile=False,\
-                                                          minimum= 1e-23,maximum=1e-18)
+                                                          minimum= 0,maximum=30,prev_val=30,this_order_num=1)
 
-priors['dt1']=MarginalizedTruncatedHollowedGaussian(condition_func_t1, alpha=2, beta=0.5, sigma_t=0.4, sigma_f=40, minimum_t=-1, maximum_t=1, minimum_f=20, maximum_f=250, n=1)
-priors['dt2']=MarginalizedTruncatedHollowedGaussian(condition_func_t2, alpha=2, beta=0.5, sigma_t=0.4, sigma_f=40, minimum_t=-1, maximum_t=1, minimum_f=20, maximum_f=250, n=2)
-priors['dt3']=MarginalizedTruncatedHollowedGaussian(condition_func_t3, alpha=2, beta=0.5, sigma_t=0.4, sigma_f=40, minimum_t=-1, maximum_t=1, minimum_f=20, maximum_f=250, n=3)
+priors["geocent_time"] = bilby.core.prior.Uniform(
+    trigger_time - 0.3, trigger_time + 0.2, name="geocent_time")
 
-priors['f0']=bilby.core.prior.Uniform(minimum = 20, maximum = 250)
-priors['f1']=ConditionalTruncatedHollowedGaussian(condition_func_f1, alpha=2, beta=0.5, sigma_t=0.4, sigma_f=40, minimum_t=-1, maximum_t=1, minimum_f=20, maximum_f=250, n=1)
-priors['f2']=ConditionalTruncatedHollowedGaussian(condition_func_f2, alpha=2, beta=0.5, sigma_t=0.4, sigma_f=40, minimum_t=-1, maximum_t=1, minimum_f=20, maximum_f=250, n=2)
-priors['f3']=ConditionalTruncatedHollowedGaussian(condition_func_f3, alpha=2, beta=0.5, sigma_t=0.4, sigma_f=40, minimum_t=-1, maximum_t=1, minimum_f=20, maximum_f=250, n=3)
+priors['dt1']= bilby.core.prior.Uniform( -0.3, 0.2, name="dt1")
+priors['dt2']= bilby.core.prior.Uniform( -0.3, 0.2, name="dt2")
+priors['dt3']= bilby.core.prior.Uniform( -0.3, 0.2, name="dt3")
+priors['dt4']= bilby.core.prior.Uniform( -0.3, 0.2, name="dt4")
+priors['dt5']= bilby.core.prior.Uniform( -0.3, 0.2, name="dt5")
+priors['dt6']= bilby.core.prior.Uniform( -0.3, 0.2, name="dt6")
+priors['dt7']= bilby.core.prior.Uniform( -0.3, 0.2, name="dt7")
 
-priors['n'] = tbilby.core.prior.DiscreteUniform(0,4,'n_dimension')
-priors=ConditionalPriorDict(priors)
+priors['f0']=bilby.core.prior.Uniform(minimum = 20, maximum = 512)
+priors['f1']=bilby.core.prior.Uniform(minimum = 20, maximum = 512)
+priors['f2']=bilby.core.prior.Uniform(minimum = 20, maximum = 512)
+priors['f3']=bilby.core.prior.Uniform(minimum = 20, maximum = 512)
+priors['f4']=bilby.core.prior.Uniform(minimum = 20, maximum = 512)
+priors['f5']=bilby.core.prior.Uniform(minimum = 20, maximum = 512)
+priors['f6']=bilby.core.prior.Uniform(minimum = 20, maximum = 512)
+priors['f7']=bilby.core.prior.Uniform(minimum = 20, maximum = 512)
+
+priors["e"] = bilby.core.prior.Uniform(name='e', minimum=-1, maximum=1)
+priors["psi"] = bilby.core.prior.Uniform(name='psi', minimum=0, maximum=np.pi, boundary='periodic')
+priors["phi0"] = bilby.core.prior.Uniform(name='phi0', minimum=0, maximum=2 * np.pi, boundary='periodic')
+priors["phi1"] = bilby.core.prior.Uniform(name='phi1', minimum=0, maximum=2 * np.pi, boundary='periodic')
+priors["phi2"] = bilby.core.prior.Uniform(name='phi2', minimum=0, maximum=2 * np.pi, boundary='periodic')
+priors["phi3"] = bilby.core.prior.Uniform(name='phi3', minimum=0, maximum=2 * np.pi, boundary='periodic')
+priors["phi4"] = bilby.core.prior.Uniform(name='phi4', minimum=0, maximum=2 * np.pi, boundary='periodic')
+priors["phi5"] = bilby.core.prior.Uniform(name='phi5', minimum=0, maximum=2 * np.pi, boundary='periodic')
+priors["phi6"] = bilby.core.prior.Uniform(name='phi6', minimum=0, maximum=2 * np.pi, boundary='periodic')
+priors["phi7"] = bilby.core.prior.Uniform(name='phi7', minimum=0, maximum=2 * np.pi, boundary='periodic')
+
+priors["Q0"] = bilby.core.prior.Uniform(name='Q0', minimum=0.1, maximum=40)
+priors["Q1"] = bilby.core.prior.Uniform(name='Q1', minimum=0.1, maximum=40)
+priors["Q2"] = bilby.core.prior.Uniform(name='Q2', minimum=0.1, maximum=40)
+priors["Q3"] = bilby.core.prior.Uniform(name='Q3', minimum=0.1, maximum=40)
+priors["Q4"] = bilby.core.prior.Uniform(name='Q4', minimum=0.1, maximum=40)
+priors["Q5"] = bilby.core.prior.Uniform(name='Q5', minimum=0.1, maximum=40)
+priors["Q6"] = bilby.core.prior.Uniform(name='Q6', minimum=0.1, maximum=40)
+priors["Q7"] = bilby.core.prior.Uniform(name='Q7', minimum=0.1, maximum=40)
+priors["dec"] = bilby.core.prior.Cosine(name='dec')
+priors["ra"] = bilby.core.prior.Uniform(name='ra', minimum=0, maximum=2 * np.pi, boundary='periodic')
+
+priors['n'] = tbilby.core.prior.DiscreteUniform(1,8,'n_dimension')
 
 likelihood = bilby.gw.likelihood.GravitationalWaveTransient(
     interferometers=ifo_list, waveform_generator=waveform_generator
@@ -190,13 +248,12 @@ result = bilby.core.sampler.run_sampler(
     likelihood,
     priors,
     sampler="dynesty",
-    sample="rwalk_dynesty",
-    nlive = 6000,
-    nact = 25,
-    walks = 600,
+    sample="rwalk",
+    nlive = 2000,
+    nact = 80,
     outdir=outdir,
     label=label,
     resume=True,
-    npool=32,
+    npool=16,
 )
 
