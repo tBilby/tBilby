@@ -2,8 +2,11 @@
 from bilby.core.prior.base import Prior
 from scipy.special import erfinv
 import numpy as np
-from scipy.special._ufuncs import xlogy, erf, log1p, stdtrit, gammaln, stdtr, \
-    btdtri, betaln, btdtr, gammaincinv, gammainc
+from scipy.special import xlogy
+
+#from scipy.special._ufuncs import xlogy, erf, log1p, stdtrit, gammaln, stdtr, \
+#    btdtri, betaln, btdtr, gammaincinv, gammainc
+
 class DiscreteUniform(Prior):
     def __init__(self, minimum, maximum, name=None, latex_label=None,
                unit=None,boundary=None):
