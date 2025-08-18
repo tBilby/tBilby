@@ -29,7 +29,8 @@ class DiscreteUniform(Prior):
         =======
         Union[float, array_like]: Rescaled probability
         """
-        if isinstance(val,int) or isinstance(val,float):
+        #if isinstance(val,int) or isinstance(val,float):
+        if isinstance(val, (int, float, np.integer, np.floating)):     
             n=1
             interval= 1 / (self.maximum - self.minimum + 1)
             while(val>=n*interval):
@@ -60,7 +61,8 @@ class DiscreteUniform(Prior):
         =======
         float: Prior probability of val
         """
-        if isinstance(val,int) or isinstance(val,float):
+        #if isinstance(val,int) or isinstance(val,float):
+        if isinstance(val, (int, float, np.integer, np.floating)):     
             if not np.isclose((val % 1), 0):
                 return 0
             p=((val >= self.minimum) & (val <= self.maximum)) / (self.maximum - self.minimum + 1)
@@ -83,7 +85,8 @@ class DiscreteUniform(Prior):
         =======
         float: log probability of val
         """
-        if isinstance(val,int) or isinstance(val,float):
+        #if isinstance(val,int) or isinstance(val,float):
+        if isinstance(val, (int, float, np.integer, np.floating)):    
             if not np.isclose((val % 1), 0):
                 return -np.inf
             ln_p=xlogy(1, (val >= self.minimum) & (val <= self.maximum)) - xlogy(1, self.maximum - self.minimum + 1)
@@ -98,7 +101,8 @@ class DiscreteUniform(Prior):
     
     
     def cdf(self, val):
-        if isinstance(val,int) or isinstance(val,float):
+        if isinstance(val, (int, float, np.integer, np.floating)): 
+        #if isinstance(val,int) or isinstance(val,float):
             n=1
             interval= 1 / (self.maximum - self.minimum + 1)
             if (val < self.minimum):
