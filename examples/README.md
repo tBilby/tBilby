@@ -36,3 +36,8 @@ The **ThreeGaussianAdvanced.py** script creates a dataset consisting of three Ga
 </figure>	
 	Three Guassian Advanced example	
 
+
+The **tBilby Calibration plot.ipynb** notebook summary 
+To assess how well the posterior model probabilities are calibrated—that is, whether they truly correspond to the frequency with which each model is correct—we construct a calibration plot. For each run, we record the posterior probability assigned to the each model. We then partition the interval [0,1] of predicted probabilities into a set of bins. For each bin, we compute two quantities: (i) the total number of runs whose predicted probability falls into that bin, and (ii) the number of those runs where the true model was indeed correct. The empirical frequency in each bin is given by the ratio of these two counts. Plotting this empirical frequency against the bin center value yields the calibration curve, while the diagonal line y = x corresponds to perfect calibration. Deviations from the diagonal indicate systematic problem in the posterior model probabilities (e.g. not enough live points in the sampler settings). To quantify statistical uncertainty in each bin, we treat the number of correct outcomes as a binomial random variable, using its variance to construct error bars or confidence intervals. This procedure provides a clear diagnostic of whether the reported posterior model probabilities match their empirical frequencies.
+
+
